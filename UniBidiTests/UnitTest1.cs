@@ -2,12 +2,9 @@ namespace UniBidiTests;
 
 public class Tests
 {
-    BidiMap bidiData;
-
     [SetUp]
     public void Setup()
     {
-        bidiData = new();
     }
 
     [Test]
@@ -15,8 +12,8 @@ public class Tests
     {
         Assert.Multiple(() =>
         {
-            Assert.That(bidiData.GetMirror('('), Is.EqualTo(')'));
-            Assert.That(bidiData.GetMirror(')'), Is.EqualTo('('));
+            Assert.That(BidiMap.GetMirror('('), Is.EqualTo(')'));
+            Assert.That(BidiMap.GetMirror(')'), Is.EqualTo('('));
         });
     }
 }
