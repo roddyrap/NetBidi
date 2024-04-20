@@ -1,10 +1,12 @@
-enum BracketType : byte {
+namespace UniBidi;
+
+public enum BracketType : byte {
     CLOSE,
     OPEN,
     NOT_BRACKET
 }
 
-enum BidiType : byte {
+public enum BidiClass : byte {
     L = 0,
     R = 1,
     AL = 2,
@@ -28,4 +30,20 @@ enum BidiType : byte {
     RLI = 20,
     FSI = 21,
     PDI = 22,
+}
+
+// Extension methods to the BidiClass enum for more readable code.
+static class BidiClassMethods {
+    public static bool IsIsolateInitiator(this BidiClass bidiClass) {
+        return bidiClass == BidiClass.FSI || bidiClass == BidiClass.RLI || bidiClass == BidiClass.LRI;
+    }
+
+    public static bool IsEmbeddingInitiator(this BidiClass bidiClass) {
+        return bidiClass == BidiClass.RLE || bidiClass == BidiClass.LRE ||
+               bidiClass == BidiClass.RLO || bidiClass == BidiClass.LRO;
+    }
+
+    public static bool IsStrongBidiClass(this BidiClass bidiClass) {
+        return bidiClass == BidiClass.R || bidiClass == BidiClass.L || bidiClass == BidiClass.AL;
+    }
 }

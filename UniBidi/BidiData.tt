@@ -15,7 +15,7 @@ string GetWebFile(string url) {
         var httpTask = Task.Run(() => client.GetAsync(url)); 
         httpTask.Wait();
 
-        HttpResponseMessage responseMessage = httpTask.Result ?? throw new Exception();
+        HttpResponseMessage responseMessage = httpTask.Result ?? throw new Exception("Failed to get unicode file");
         responseMessage.EnsureSuccessStatusCode();
         
         var readTask = Task.Run(() => responseMessage.Content.ReadAsStringAsync());
@@ -27,11 +27,11 @@ string GetWebFile(string url) {
 <#
 string mirroringFileString = GetWebFile("https://www.unicode.org/Public/UCD/latest/ucd/BidiBrackets.txt");
 string bracketsFileString = GetWebFile("https://www.unicode.org/Public/UCD/latest/ucd/BidiBrackets.txt");
-string bidiTypesFileString = GetWebFile("https://www.unicode.org/Public/UNIDATA/extracted/DerivedBidiClass.txt");
+string bidiClasssFileString = GetWebFile("https://www.unicode.org/Public/UNIDATA/extracted/DerivedBidiClass.txt");
 #>
 <#
 // Get unicode version by searching for the first version in the bidi type file.
-System.Text.RegularExpressions.Match versionMatch = new System.Text.RegularExpressions.Regex("[\\d]+\\.[\\d]+\\.[\\d]+").Match(bidiTypesFileString);
+System.Text.RegularExpressions.Match versionMatch = new System.Text.RegularExpressions.Regex("[\\d]+\\.[\\d]+\\.[\\d]+").Match(bidiClasssFileString);
 
 if (!versionMatch.Success) {
     throw new Exception("Invalid unicode version");
@@ -78,8 +78,8 @@ foreach (string line in bracketsFileString.Split('\n')) {
     );
 }
 
-List<(UInt32, string)> bidiTypes = new();
-foreach (string line in bidiTypesFileString.Split('\n')) {
+List<(UInt32, string)> bidiClasss = new();
+foreach (string line in bidiClasssFileString.Split('\n')) {
     if (line.StartsWith('#')) continue;
 
     var noCommentLine = line.Split("#")[0];
@@ -99,19 +99,20 @@ foreach (string line in bidiTypesFileString.Split('\n')) {
         stopIndex = startIndex;
     }
 
-    string bidiTypeString = splitLine[1].Trim();
+    string bidiClassString = splitLine[1].Trim();
 
     // The default bidi type of a character is "L". Becuase of that, if there's no mapping, a character's type
     // is assumed to be "L", so we don't need to create the mappings. This helps to save some mappings which
     // makes generation and compilation faster.
-    if (bidiTypeString == "L") continue;
+    if (bidiClassString == "L") continue;
 
     for (UInt32 currentIndex = startIndex; currentIndex <= stopIndex; ++currentIndex) {
-        bidiTypes.Add((currentIndex, bidiTypeString));
+        bidiClasss.Add((currentIndex, bidiClassString));
     }
 }
 #>
 // THIS FILE WAS AUTO-GENERATED DIRECTLY FROM UNICODE DATA, DO NOT EDIT MANUALLY!
+namespace UniBidi;
 
 static class BidiMap {
     public const string UNICODE_VERSION = "<#= unicodeVersion #>";
@@ -125,12 +126,12 @@ static class BidiMap {
         };
     }
 
-    public static BidiType GetBidiType(UInt32 bidiChar) {
+    public static BidiClass GetBidiClass(UInt32 bidiChar) {
         return bidiChar switch {
-<# foreach ((UInt32 bidiChar, string bidiType) in bidiTypes) {#>
-            <#= bidiChar #> => BidiType.<#= bidiType #>,
+<# foreach ((UInt32 bidiChar, string bidiClass) in bidiClasss) {#>
+            <#= bidiChar #> => BidiClass.<#= bidiClass #>,
 <# } #>
-            _ => BidiType.L
+            _ => BidiClass.L
         };
     }
 
