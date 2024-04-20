@@ -6,9 +6,9 @@
 <#@ import namespace="System.Threading.Tasks" #>
 <#@ assembly name="System.Collections" #>
 <#@ import namespace="System.Collections.Generic" #>
+<#@ assembly name="System.Text.RegularExpressions.dll" #>
 <#
 // Get the unicode data from the web.
-// Console.WriteLine(BracketType.CLOSE);
 string GetWebFile(string url) {
     using (HttpClient client = new())
     {
@@ -30,6 +30,16 @@ string bracketsFileString = GetWebFile("https://www.unicode.org/Public/UCD/lates
 string bidiTypesFileString = GetWebFile("https://www.unicode.org/Public/UNIDATA/extracted/DerivedBidiClass.txt");
 #>
 <#
+// Get unicode version by searching for the first version in the bidi type file.
+System.Text.RegularExpressions.Match versionMatch = new System.Text.RegularExpressions.Regex("[\\d]+\\.[\\d]+\\.[\\d]+").Match(bidiTypesFileString);
+
+if (!versionMatch.Success) {
+    throw new Exception("Invalid unicode version");
+}
+
+string unicodeVersion = versionMatch.Value;
+#>
+<#
 // process the unicode data.
 List<(UInt32, UInt32)> mirrorPairs = new();
 foreach (string line in mirroringFileString.Split('\n')) {
@@ -46,8 +56,8 @@ foreach (string line in mirroringFileString.Split('\n')) {
     );
 }
 
-List<(UInt32, UInt32, bool)> bracketData = new();
-foreach (string line in bidiTypesFileString.Split('\n')) {
+List<(UInt32, UInt32, string)> bracketData = new();
+foreach (string line in bracketsFileString.Split('\n')) {
     if (line.StartsWith('#')) continue;
 
     var noCommentLine = line.Split("#")[0];
@@ -59,12 +69,16 @@ foreach (string line in bidiTypesFileString.Split('\n')) {
         (
             Convert.ToUInt32(splitLine[0].Trim(), 16),
             Convert.ToUInt32(splitLine[1].Trim(), 16),
-            splitLine[2] == "o"
+            splitLine[2].Trim() switch {
+                "o" => "OPEN",
+                "c" => "CLOSE",
+                _ => throw new System.ComponentModel.InvalidEnumArgumentException()
+            }
         )
     );
 }
 
-List<(UInt32, UInt32)> bidiTypes = new();
+List<(UInt32, string)> bidiTypes = new();
 foreach (string line in bidiTypesFileString.Split('\n')) {
     if (line.StartsWith('#')) continue;
 
@@ -85,68 +99,47 @@ foreach (string line in bidiTypesFileString.Split('\n')) {
         stopIndex = startIndex;
     }
 
-    UInt32 bidiType = splitLine[1].Trim() switch {
-            "L" => 0,
-            "R" => 1,
-            "AL" => 2,
-            "EN" => 3,
-            "ES" => 4,
-            "ET" => 5,
-            "AN" => 6,
-            "CS" => 7,
-            "NSM" => 8,
-            "BN" => 9,
-            "B" => 10,
-            "S" => 11,
-            "WS" => 12,
-            "ON" => 13,
-            "LRE" => 14,
-            "LRO" => 15,
-            "RLE" => 16,
-            "RLO" => 17,
-            "PDF" => 18,
-            "LRI" => 19,
-            "RLI" => 20,
-            "FSI" => 21,
-            "PDI" => 22,
-            _ => throw new System.ComponentModel.InvalidEnumArgumentException(),
-    };
+    string bidiTypeString = splitLine[1].Trim();
+
+    // The default bidi type of a character is "L". Becuase of that, if there's no mapping, a character's type
+    // is assumed to be "L", so we don't need to create the mappings. This helps to save some mappings which
+    // makes generation and compilation faster.
+    if (bidiTypeString == "L") continue;
+
     for (UInt32 currentIndex = startIndex; currentIndex <= stopIndex; ++currentIndex) {
-        bidiTypes.Add((currentIndex, bidiType));
+        bidiTypes.Add((currentIndex, bidiTypeString));
     }
 }
 #>
 // THIS FILE WAS AUTO-GENERATED DIRECTLY FROM UNICODE DATA, DO NOT EDIT MANUALLY!
 
 static class BidiMap {
-    static Dictionary<UInt32, UInt32> m_mirroringData = new();
-    static Dictionary<UInt32, UInt32> m_pairedBrackets = new();
-    static Dictionary<UInt32, BracketType> m_bracketTypes = new();
-    static Dictionary<UInt32, BidiType> m_bidiTypes = new();
-
-    static BidiMap() {
-<# foreach ((UInt32 bidiChar, UInt32 mirrorChar) in mirrorPairs) {#>
-        m_mirroringData[<#= bidiChar #>] = <#= mirrorChar #>;
-<# } #>
-
-<# foreach ((UInt32 bidiChar, UInt32 pairedBracket, bool bracketType) in bracketData) {#>
-<#      // For some godforsaken reason T4 converts boolean to "True" and "False", which are invalid in C#. #>
-        m_pairedBrackets[<#= bidiChar #>] = <#= pairedBracket #>;
-        m_bracketTypes[<#= bidiChar #>] = (BracketType)(<#= Convert.ToUInt16(bracketType) #>);
-<# } #>
-
-<# foreach ((UInt32 bidiChar, UInt32 bidiType) in bidiTypes) {#>
-        m_bidiTypes[<#= bidiChar #>] = (BidiType)<#= bidiType #>;
-<# } #>
-    }
+    public const string UNICODE_VERSION = "<#= unicodeVersion #>";
 
     public static UInt32 GetMirror(UInt32 bidiChar) {
-        m_mirroringData.TryGetValue(bidiChar, out UInt32 result);
-        return result;
+        return bidiChar switch {
+<# foreach ((UInt32 bidiChar, UInt32 mirrorChar) in mirrorPairs) {#>
+            <#= bidiChar #> => <#= mirrorChar #>,
+<# } #>
+            _ => bidiChar
+        };
     }
 
-    public static UInt32 GetBidiType(UInt32 bidiChar) {
-        m_mirroringData.TryGetValue(bidiChar, out UInt32 result);
-        return result;
+    public static BidiType GetBidiType(UInt32 bidiChar) {
+        return bidiChar switch {
+<# foreach ((UInt32 bidiChar, string bidiType) in bidiTypes) {#>
+            <#= bidiChar #> => BidiType.<#= bidiType #>,
+<# } #>
+            _ => BidiType.L
+        };
+    }
+
+    public static BracketType GetBracketType(UInt32 bidiChar) {
+        return bidiChar switch {
+<# foreach ((UInt32 bidiChar, UInt32 _, string bracketType) in bracketData) {#>
+            <#= bidiChar #> => BracketType.<#= bracketType #>,
+<# } #>
+            _ => BracketType.NOT_BRACKET
+        };
     }
 }

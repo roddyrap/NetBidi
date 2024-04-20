@@ -1,6 +1,7 @@
 enum BracketType : byte {
     CLOSE,
-    OPEN
+    OPEN,
+    NOT_BRACKET
 }
 
 enum BidiType : byte {
