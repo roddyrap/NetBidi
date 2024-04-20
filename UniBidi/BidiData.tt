@@ -1,0 +1,59 @@
+<#@ template debug="false" hostspecific="false" language="C#" #>
+<#@ output extension=".cs" #>
+<#@ assembly name="System.Net.Http.dll" #>
+<#@ import namespace="System.Net.Http" #>
+<#@ assembly name="System.Runtime" #>
+<#@ import namespace="System.Threading.Tasks" #>
+<#@ assembly name="System.Collections" #>
+<#@ import namespace="System.Collections.Generic" #>
+<#
+// Get the unicode data from the web.
+string mirroringFileString;
+using (HttpClient client = new())
+{
+    var httpTask = Task.Run(() => client.GetAsync("https://www.unicode.org/Public/UCD/latest/ucd/BidiBrackets.txt")); 
+    httpTask.Wait();
+
+    HttpResponseMessage responseMessage = httpTask.Result ?? throw new Exception();
+    responseMessage.EnsureSuccessStatusCode();
+    
+    var readTask = Task.Run(() => responseMessage.Content.ReadAsStringAsync());
+    readTask.Wait();
+
+    mirroringFileString = readTask.Result;
+}
+#>
+<#
+// process the unicode data.
+List<(UInt32, UInt32)> mirrorPairs = new();
+foreach (string line in mirroringFileString.Split('\n')) {
+    if (line.StartsWith('#')) continue;
+
+    string[] splitLine = line.Split(";");
+    if (splitLine.Length < 2) continue;
+
+    mirrorPairs.Add(
+        (
+            Convert.ToUInt32(splitLine[0].Trim(), 16),
+            Convert.ToUInt32(splitLine[1].Trim(), 16)
+        )
+    );
+}
+#>
+// THIS FILE WAS AUTO-GENERATED FROM UNICODE DATA, DO NOT EDIT MANUALLY!
+
+class BidiMap {
+    Dictionary<UInt32, UInt32> m_mirroringData;
+    public BidiMap() {
+        this.m_mirroringData = new();
+
+    <# foreach ((UInt32 bidiChar, UInt32 mirrorChar) in mirrorPairs) {#>
+        this.m_mirroringData[<#= bidiChar #>] = <#= mirrorChar #>;
+    <# } #>
+    }
+
+    public UInt32 GetMirror(UInt32 bidiChar) {
+        this.m_mirroringData.TryGetValue(bidiChar, out UInt32 result);
+        return result;
+    }
+}
