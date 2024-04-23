@@ -115,7 +115,7 @@ public static class UniBidi
         }
 
         // L1 section 4.
-        for (int absoluteCharIndex = inString.Length; absoluteCharIndex >= 0; --absoluteCharIndex) {
+        for (int absoluteCharIndex = inString.Length - 1; absoluteCharIndex >= 0; --absoluteCharIndex) {
             BidiClass iteratedBidiClassValue = bidiClassValues[absoluteCharIndex];
             if (iteratedBidiClassValue == BidiClass.WS || iteratedBidiClassValue.IsIsolateInitiator() || iteratedBidiClassValue == BidiClass.PDI) {
                 embeddingValues[absoluteCharIndex] = paragraphEmbeddingLevel;
@@ -135,7 +135,7 @@ public static class UniBidi
                     reverseStartIndex = currentIndex;
                 }
                 else if (embeddingValues[currentIndex] < minReversedLevel && reverseStartIndex != int.MaxValue) {
-                    Array.Reverse(newString, reverseStartIndex, currentIndex - 1);
+                    Array.Reverse(newString, reverseStartIndex, currentIndex - reverseStartIndex + 1);
                     reverseStartIndex = int.MaxValue;
                 }
             }
@@ -252,6 +252,8 @@ public static class UniBidi
                         bidiClassValues[absoluteChangedNIIndex] = oldResolvedStrongBidiClassValue;
                     }
                 }
+
+                n1CurrentCharIndex += 1;
             }
 
             // Rule N2.
