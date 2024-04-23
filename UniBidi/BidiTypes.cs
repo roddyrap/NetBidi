@@ -46,4 +46,14 @@ static class BidiClassMethods {
     public static bool IsStrongBidiClass(this BidiClass bidiClass) {
         return bidiClass == BidiClass.R || bidiClass == BidiClass.L || bidiClass == BidiClass.AL;
     }
+
+    public static bool IsSeparator(this BidiClass bidiClass) {
+        return bidiClass == BidiClass.ES || bidiClass == BidiClass.CS || bidiClass == BidiClass.B || bidiClass == BidiClass.S;
+    }
+
+    // 3.1.4 NI symbol.
+    public static bool IsNeutralOrIsolate(this BidiClass bidiClass) {
+        return bidiClass == BidiClass.B || bidiClass == BidiClass.S || bidiClass == BidiClass.WS || bidiClass == BidiClass.ON ||
+               bidiClass == BidiClass.FSI || bidiClass == BidiClass.LRI || bidiClass == BidiClass.RLI || bidiClass == BidiClass.PDI;
+    }
 }

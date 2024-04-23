@@ -135,6 +135,15 @@ static class BidiMap {
         };
     }
 
+    public static uint GetPairedBracket(UInt32 bidiChar) {
+        return bidiChar switch {
+<# foreach ((UInt32 bidiChar, UInt32 pairedBracket, string _) in bracketData) {#>
+            <#= bidiChar #> => <#= pairedBracket #>,
+<# } #>
+            _ => uint.MaxValue
+        };
+    }
+
     public static BracketType GetBracketType(UInt32 bidiChar) {
         return bidiChar switch {
 <# foreach ((UInt32 bidiChar, UInt32 _, string bracketType) in bracketData) {#>
