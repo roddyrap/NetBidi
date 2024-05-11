@@ -6,17 +6,17 @@ using System.Text;
 
 namespace UniBidi;
 
-enum DirectionalOverrideStatus {
+public enum TextDirection {
     LTR,
     RTL,
     NEUTRAL
 }
 
 // According to the 3.3.2 specification of applying the X rules.
-class DirectionalStatus(uint embeddingLevel, DirectionalOverrideStatus directionalOverrideStatus, bool directionalIsolateStatus)
+class DirectionalStatus(uint embeddingLevel, TextDirection directionalOverrideStatus, bool directionalIsolateStatus)
 {
     public uint embeddingLevel = embeddingLevel;
-    public DirectionalOverrideStatus directionalOverrideStatus = directionalOverrideStatus;
+    public TextDirection directionalOverrideStatus = directionalOverrideStatus;
     public bool directionalIsolateStatus = directionalIsolateStatus;
 }
 
@@ -79,25 +79,33 @@ public static class UniBidi
     const uint LTR_DEFAULT_EMBEDDING_LEVEL = 0;
     const uint RTL_DEFAULT_EMBEDDING_LEVEL = 1;
 
-    public static string BidiResolveString(string visualString) {
+    public static string BidiResolveString(uint[] logicalString, TextDirection givenParagraphEmbedding = TextDirection.NEUTRAL, bool mirrorCharacters = true) {
         // TODO: Fulfill P1 - Split by paragraph for the algorithm without discarding the paragraph breaks.
         // TODO: Also implement X8 according to how paragraphs are implemented.
-        uint[] utf32String = ConvertString(visualString);
 
-        uint paragraphEmbeddingLevel = GetParagraphEmbeddingLevel(utf32String);
-        uint[] filterredUTF32String = ResolveExplicit(utf32String, paragraphEmbeddingLevel,
+        uint paragraphEmbeddingLevel = givenParagraphEmbedding switch {
+            TextDirection.LTR => LTR_DEFAULT_EMBEDDING_LEVEL,
+            TextDirection.RTL => RTL_DEFAULT_EMBEDDING_LEVEL,
+            TextDirection.NEUTRAL => GetParagraphEmbeddingLevel(logicalString)
+        };
+
+        uint[] filterredLogicalString = ResolveExplicit(logicalString, paragraphEmbeddingLevel,
                                                       out uint[] embeddingValues, out BidiClass[] bidiClassValues);
 
-        List<IsolatingRunSequence> isolatingRuns = GetIsolatingRunLevels(filterredUTF32String, embeddingValues, bidiClassValues, paragraphEmbeddingLevel);
+        List<IsolatingRunSequence> isolatingRuns = GetIsolatingRunLevels(filterredLogicalString, embeddingValues, bidiClassValues, paragraphEmbeddingLevel);
         ResolveX10(isolatingRuns, bidiClassValues);
-        ResolveNI(isolatingRuns, filterredUTF32String, embeddingValues, bidiClassValues);
+        ResolveNI(isolatingRuns, filterredLogicalString, embeddingValues, bidiClassValues);
 
-        uint[] outputUTF32String = ReorderString(filterredUTF32String, embeddingValues, bidiClassValues, paragraphEmbeddingLevel);
-        return ConvertUInts(outputUTF32String);
+        uint[] outputLogicalString = ReorderString(filterredLogicalString, embeddingValues, bidiClassValues, paragraphEmbeddingLevel, mirrorCharacters);
+        return ConvertUInts(outputLogicalString);
+    }
+
+    public static string BidiResolveString(string logicalString) {
+        return BidiResolveString(ConvertString(logicalString));
     }
 
     // The L rules implementation. TODO: Linebreaking size support?
-    static uint[] ReorderString(uint[] inString, uint[] embeddingValues, BidiClass[] bidiClassValues, uint paragraphEmbeddingLevel) {
+    static uint[] ReorderString(uint[] inString, uint[] embeddingValues, BidiClass[] bidiClassValues, uint paragraphEmbeddingLevel, bool mirrorCharacters = true) {
         for (int absoluteCharIndex = 0; absoluteCharIndex < inString.Length; ++absoluteCharIndex) {
             BidiClass bidiClassValue = bidiClassValues[absoluteCharIndex];
             if (bidiClassValue == BidiClass.S || bidiClassValue == BidiClass.B) {
@@ -135,7 +143,7 @@ public static class UniBidi
                     reverseStartIndex = currentIndex;
                 }
                 else if (embeddingValues[currentIndex] < minReversedLevel && reverseStartIndex != int.MaxValue) {
-                    Array.Reverse(newString, reverseStartIndex, currentIndex - reverseStartIndex + 1);
+                    Array.Reverse(newString, reverseStartIndex, currentIndex - reverseStartIndex);
                     reverseStartIndex = int.MaxValue;
                 }
             }
@@ -144,9 +152,11 @@ public static class UniBidi
         // TODO: L3 implementation.
 
         // L4.
-        for (int absoluteCharIndex = 0; absoluteCharIndex < newString.Length; ++absoluteCharIndex) {
-            if (embeddingValues[absoluteCharIndex] % 2 == RTL_DEFAULT_EMBEDDING_LEVEL) {
-                newString[absoluteCharIndex] = BidiMap.GetMirror(newString[absoluteCharIndex]);
+        if (mirrorCharacters) {
+            for (int absoluteCharIndex = 0; absoluteCharIndex < newString.Length; ++absoluteCharIndex) {
+                if (embeddingValues[absoluteCharIndex] % 2 == RTL_DEFAULT_EMBEDDING_LEVEL) {
+                    newString[absoluteCharIndex] = BidiMap.GetMirror(newString[absoluteCharIndex]);
+                }
             }
         }
 
@@ -175,7 +185,7 @@ public static class UniBidi
                     // TODO: Unicode weird U+3009 and U+232A equivalence.
                     if (currentChar == bracketStack[bracketStackIndex].Item2) {
                         bracketPairs.Add((bracketStack[bracketStackIndex].Item1, currentAbsoluteIndex));
-                        bracketStack.RemoveRange(bracketStackIndex, bracketStack.Count - bracketStackIndex + 1);
+                        bracketStack.RemoveRange(bracketStackIndex, bracketStack.Count - bracketStackIndex);
 
                         break;
                     }
@@ -495,21 +505,21 @@ public static class UniBidi
 
     static void HandleEmbedded(BidiClass embeddedChar, Stack<DirectionalStatus> directionalStack, ref uint overflowIsolateCount, ref uint overflowEmbeddingCount) {
         bool isEven;
-        DirectionalOverrideStatus newDirectionalOverride;
+        TextDirection newDirectionalOverride;
 
         if (embeddedChar == BidiClass.RLE) {
             isEven = false;
-            newDirectionalOverride = DirectionalOverrideStatus.NEUTRAL;
+            newDirectionalOverride = TextDirection.NEUTRAL;
         } else if (embeddedChar == BidiClass.LRE) {
             isEven = true;
-            newDirectionalOverride = DirectionalOverrideStatus.NEUTRAL;
+            newDirectionalOverride = TextDirection.NEUTRAL;
         } else if (embeddedChar == BidiClass.RLO) {
             isEven = false;
-            newDirectionalOverride = DirectionalOverrideStatus.RTL;
+            newDirectionalOverride = TextDirection.RTL;
 
         } else if (embeddedChar == BidiClass.LRO) {
             isEven = true;
-            newDirectionalOverride = DirectionalOverrideStatus.LTR;
+            newDirectionalOverride = TextDirection.LTR;
         } else {
             return;
         }
@@ -536,9 +546,9 @@ public static class UniBidi
             return;
         }
 
-        if (directionalStack.Peek().directionalOverrideStatus == DirectionalOverrideStatus.LTR) {
+        if (directionalStack.Peek().directionalOverrideStatus == TextDirection.LTR) {
             isolateChar = BidiClass.L;
-        } else if (directionalStack.Peek().directionalOverrideStatus == DirectionalOverrideStatus.RTL) {
+        } else if (directionalStack.Peek().directionalOverrideStatus == TextDirection.RTL) {
             isolateChar = BidiClass.R;
         }
 
@@ -546,7 +556,7 @@ public static class UniBidi
         uint newEmbeddingLevel = GetLargerParityThan(directionalStack.Peek().embeddingLevel, isEven);
         if (newEmbeddingLevel <= MAX_DPETH && overflowIsolateCount == 0 && overflowEmbeddingCount == 0) {
             validIsolateCount += 1;
-            directionalStack.Push(new DirectionalStatus(newEmbeddingLevel, DirectionalOverrideStatus.NEUTRAL, true));
+            directionalStack.Push(new DirectionalStatus(newEmbeddingLevel, TextDirection.NEUTRAL, true));
         } else {
             overflowIsolateCount += 1;
         }
@@ -558,7 +568,7 @@ public static class UniBidi
         Stack<DirectionalStatus> directionalStack = new();
 
         // According to X1.
-        directionalStack.Push(new DirectionalStatus(paragraphEmbeddingLevel, DirectionalOverrideStatus.NEUTRAL, false));
+        directionalStack.Push(new DirectionalStatus(paragraphEmbeddingLevel, TextDirection.NEUTRAL, false));
 
         // According to X1.
         uint overflowIsolateCount = 0;
@@ -566,14 +576,15 @@ public static class UniBidi
         uint validIsolateCount = 0;
 
         // Instantiate lists and not arrays because X9 character removal is merged with this passthrough,
-        // so it's not possible to know the size of the string in advance.
-        List<uint> embeddingValuesList = new();
-        List<BidiClass> bidiClassValuesList = new();
-        List<uint> filteredStringList = new();
+        // so it's not possible to know the size of the string in advance. Still, we have a minor
+        // optimization by knowing that the capacity should not be more than inString.Length.
+        List<uint> embeddingValuesList = new(inString.Length);
+        List<BidiClass> bidiClassValuesList = new(inString.Length);
+        List<uint> filteredStringList = new(inString.Length);
 
         for (int currentIndex = 0; currentIndex < inString.Length; ++currentIndex) {
             uint currentChar = inString[currentIndex];
-            BidiClass currentBidiClass  = BidiMap.GetBidiClass(currentChar);
+            BidiClass currentBidiClass = BidiMap.GetBidiClass(currentChar);
             uint newCurrentEmbeddedLevel = uint.MaxValue;
 
             switch (currentBidiClass) {
@@ -648,10 +659,10 @@ public static class UniBidi
             default:
                 newCurrentEmbeddedLevel = directionalStack.Peek().embeddingLevel;
 
-                DirectionalOverrideStatus directionalOverrideStatus = directionalStack.Peek().directionalOverrideStatus;
-                if (directionalOverrideStatus == DirectionalOverrideStatus.LTR) {
+                TextDirection directionalOverrideStatus = directionalStack.Peek().directionalOverrideStatus;
+                if (directionalOverrideStatus == TextDirection.LTR) {
                     currentBidiClass = BidiClass.L;
-                } else if (directionalOverrideStatus == DirectionalOverrideStatus.RTL) {
+                } else if (directionalOverrideStatus == TextDirection.RTL) {
                     currentBidiClass = BidiClass.R;
                 }
                 break;
