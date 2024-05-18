@@ -76,13 +76,15 @@ for (int currentTestIndex = 0; currentTestIndex < allTests.Count(); ++currentTes
     TestData currentTestData = allTests[currentTestIndex];
 
     string expectedResult = "";
-    foreach (int i in currentTestData.validIndices) {
+    foreach (int i in currentTestData.displayIndices) {
         expectedResult += System.Text.Encoding.UTF32.GetString(BitConverter.GetBytes(currentTestData.testString[i]));
     } #>
     [TestCase(new UInt32[]{<#= string.Join(", ", currentTestData.testString) #>}, TextDirection.<#=IntToDirectionString(currentTestData.paragraphEmbeddingLevel)#>, ExpectedResult="<#=expectedResult#>")]
 <#}#>
     public string TestResolveString(UInt32[] input, TextDirection paragraphEmbeddingLevel)
     {
+        Console.WriteLine($"Test Input: {string.Join(" ", input.Select(x => x.ToString("X4")))}");
+
         // The unicode test don't support character mirroring.
         return UniBidi.BidiResolveString(input, paragraphEmbeddingLevel, false);
     }
@@ -102,15 +104,15 @@ class TestData {
 
     // The index of each character (not including characters removed by X9) if it were displayed from left
     // to right, after resolving everything.
-    public int[] diplayIndices;
+    public int[] displayIndices;
 
     public TestData(uint[] testString, uint paragraphEmbeddingLevel, uint resolvedParagraphEmbeddingLevel,
-                    int[] validIndices, uint[] resolvedEmbeddingLevels, int[] diplayIndices) {
+                    int[] validIndices, uint[] resolvedEmbeddingLevels, int[] displayIndices) {
         this.testString = testString;
         this.paragraphEmbeddingLevel = paragraphEmbeddingLevel;
         this.resolvedParagraphEmbeddingLevel = resolvedParagraphEmbeddingLevel;
         this.resolvedEmbeddingLevels = resolvedEmbeddingLevels;
-        this.diplayIndices = diplayIndices;
+        this.displayIndices = displayIndices;
         this.validIndices = validIndices;
     }
 }

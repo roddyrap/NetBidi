@@ -94,7 +94,10 @@ public static class UniBidi
 
         List<IsolatingRunSequence> isolatingRuns = GetIsolatingRunLevels(filterredLogicalString, embeddingValues, bidiClassValues, paragraphEmbeddingLevel);
         ResolveX10(isolatingRuns, bidiClassValues);
-        ResolveNI(isolatingRuns, filterredLogicalString, embeddingValues, bidiClassValues);
+
+        Console.WriteLine($"Intermediate class values: {string.Join(", ", bidiClassValues)}");
+
+        ResolveNX(isolatingRuns, filterredLogicalString, embeddingValues, bidiClassValues);
 
         uint[] outputLogicalString = ReorderString(filterredLogicalString, embeddingValues, bidiClassValues, paragraphEmbeddingLevel, mirrorCharacters);
         return ConvertUInts(outputLogicalString);
@@ -111,10 +114,10 @@ public static class UniBidi
             if (bidiClassValue == BidiClass.S || bidiClassValue == BidiClass.B) {
                 embeddingValues[absoluteCharIndex] = paragraphEmbeddingLevel;
 
-                for (int iteratedCharIndex = 0; iteratedCharIndex >= 0; --iteratedCharIndex) {
+                for (int iteratedCharIndex = absoluteCharIndex - 1; iteratedCharIndex >= 0; --iteratedCharIndex) {
                     BidiClass iteratedBidiClassValue = bidiClassValues[iteratedCharIndex];
                     if (iteratedBidiClassValue == BidiClass.WS || iteratedBidiClassValue.IsIsolateInitiator() || iteratedBidiClassValue == BidiClass.PDI) {
-                        embeddingValues[absoluteCharIndex] = paragraphEmbeddingLevel;
+                        embeddingValues[iteratedCharIndex] = paragraphEmbeddingLevel;
                     } else {
                         break;
                     }
@@ -136,11 +139,19 @@ public static class UniBidi
         Array.Copy(inString, newString, newString.Length);
 
         uint highestEmbeddingLevel = embeddingValues.Max();
+        // uint lowestOddEmbeddingLevel = embeddingValues.Where(level => level % 2 == 1).Min();
         for (uint minReversedLevel = highestEmbeddingLevel; minReversedLevel > 0; --minReversedLevel) {
             int reverseStartIndex = int.MaxValue;
             for (int currentIndex = 0; currentIndex < newString.Length; ++currentIndex) {
-                if (embeddingValues[currentIndex] >= minReversedLevel && reverseStartIndex == int.MaxValue) {
-                    reverseStartIndex = currentIndex;
+                if (embeddingValues[currentIndex] >= minReversedLevel) {
+                    if (reverseStartIndex == int.MaxValue) {
+                        reverseStartIndex = currentIndex;
+                    }
+                    // Handle the scenario in which the last character in the string should be reversed.
+                    else if (currentIndex == newString.Length - 1) {
+                        Array.Reverse(newString, reverseStartIndex, currentIndex - reverseStartIndex + 1);
+                        reverseStartIndex = int.MaxValue;
+                    }
                 }
                 else if (embeddingValues[currentIndex] < minReversedLevel && reverseStartIndex != int.MaxValue) {
                     Array.Reverse(newString, reverseStartIndex, currentIndex - reverseStartIndex);
@@ -160,6 +171,9 @@ public static class UniBidi
             }
         }
 
+        Console.WriteLine($"Input: {string.Join(", ", inString.Select(x => x.ToString("X4")))}");
+        Console.WriteLine($"Output: {string.Join(", ", newString.Select(x => x.ToString("X4")))}");
+        Console.WriteLine($"Embedding Values: {string.Join(", ", embeddingValues)}");
         return newString;
     }
 
@@ -175,12 +189,16 @@ public static class UniBidi
             if (bidiClassValues[currentAbsoluteIndex] != BidiClass.ON) continue;
 
             uint currentChar = inString[currentAbsoluteIndex];
-            if (BidiMap.GetBracketType(currentChar) == BracketType.OPEN) {
+            BracketType currentBracketType = BidiMap.GetBracketType(currentChar);
+            if (currentBracketType == BracketType.OPEN) {
                 // BD16 specifies that if the bracket stack is too small (need a 64th entry) then processing is immediatetly stopped.
-                if (bracketStack.Count < MAX_BRACKET_PAIRS)
+                if (bracketStack.Count < MAX_BRACKET_PAIRS) {
                     bracketStack.Add((currentAbsoluteIndex, BidiMap.GetPairedBracket(currentChar)));
-                else return bracketPairs;
-            } else if (BidiMap.GetBracketType(currentChar) == BracketType.CLOSE) {
+                }
+                else {
+                    return bracketPairs;
+                }
+            } else if (currentBracketType == BracketType.CLOSE) {
                 for (int bracketStackIndex = bracketStack.Count -1; bracketStackIndex >= 0; --bracketStackIndex) {
                     // TODO: Unicode weird U+3009 and U+232A equivalence.
                     if (currentChar == bracketStack[bracketStackIndex].Item2) {
@@ -196,10 +214,11 @@ public static class UniBidi
         return bracketPairs;
     }
 
-    static BidiClass NIResolveStrongBidiClass(BidiClass bidiClass) {
-        if (bidiClass == BidiClass.L ) {
+    static BidiClass NXResolveStrongBidiClass(BidiClass bidiClass) {
+        if (bidiClass == BidiClass.L) {
             return BidiClass.L;
         }
+
         // N0 mentions that EN and AN are supposed to be treated as strong Rs.
         // AL shouldn't appear by this stage in the algorithm, but I am including it for correctness.
         else if (bidiClass == BidiClass.R || bidiClass == BidiClass.EN ||
@@ -210,61 +229,88 @@ public static class UniBidi
         return BidiClass.ON;
     }
 
-    // NI rules.
-    static void ResolveNI(List<IsolatingRunSequence> isolatingRuns, uint[] inString, uint[] embeddingValues, BidiClass[] bidiClassValues) {
+    // NX rules.
+    static void ResolveNX(List<IsolatingRunSequence> isolatingRuns, uint[] inString, uint[] embeddingValues, BidiClass[] bidiClassValues) {
         foreach (IsolatingRunSequence isolatingRunSequence in isolatingRuns) {
-            // N0.
+            // Rule N0.
             List<(int, int)> bracketPairs = GetBracketPairs(isolatingRunSequence, inString, bidiClassValues);
+            Console.WriteLine(string.Join(", ", bracketPairs));
+            Console.WriteLine(isolatingRunSequence.embdeddingLevel);
+
             foreach ((int, int) bracketIndices in bracketPairs) {
-                BidiClass foundStrongBidiClass = BidiClass.ON;
-                for (int currentAbsoluteIndex = bracketIndices.Item1; currentAbsoluteIndex <= bracketIndices.Item2; ++currentAbsoluteIndex) {
-                    foundStrongBidiClass = NIResolveStrongBidiClass(bidiClassValues[currentAbsoluteIndex]);
-                    if (foundStrongBidiClass != BidiClass.ON) break;
+                // I need to know if the matching strong has been found, not just the first strong one found.
+                bool foundEmbeddingBidiValue = false;
+                bool foundInvertedBidiValue = false;
+
+                BidiClass embeddingBidiClass = isolatingRunSequence.embdeddingLevel % 2 == LTR_DEFAULT_EMBEDDING_LEVEL? BidiClass.L : BidiClass.R;
+
+                // TODO: Consider isolating run sequence.
+                for (int insideCharIndex = bracketIndices.Item1; insideCharIndex <= bracketIndices.Item2; ++insideCharIndex) {
+                    BidiClass resolvedClass = NXResolveStrongBidiClass(bidiClassValues[insideCharIndex]);
+
+                    if (resolvedClass == embeddingBidiClass) {
+                        foundEmbeddingBidiValue = true;
+                    } else if (resolvedClass != BidiClass.ON) {
+                        foundInvertedBidiValue = true;
+                    }
                 }
 
-                if ((foundStrongBidiClass == BidiClass.L && isolatingRunSequence.embdeddingLevel % 2 == LTR_DEFAULT_EMBEDDING_LEVEL) ||
-                    (foundStrongBidiClass == BidiClass.R && isolatingRunSequence.embdeddingLevel % 2 == RTL_DEFAULT_EMBEDDING_LEVEL)) {
-                    bidiClassValues[bracketIndices.Item1] = foundStrongBidiClass;
-                    bidiClassValues[bracketIndices.Item2] = foundStrongBidiClass;
-                } else if (foundStrongBidiClass != BidiClass.ON) {
-                    BidiClass foundStrongBidiClassValue = isolatingRunSequence.startOfSequene;
-                    for (int beforeBracketIndex = bracketIndices.Item1; beforeBracketIndex >= 0; --beforeBracketIndex) {
-                        BidiClass resolvedBidiClassValue = NIResolveStrongBidiClass(bidiClassValues[beforeBracketIndex]);
+                if (foundEmbeddingBidiValue) {
+                    bidiClassValues[bracketIndices.Item1] = embeddingBidiClass;
+                    bidiClassValues[bracketIndices.Item2] = embeddingBidiClass;
+                // According to N0 section c.
+                } else if (foundInvertedBidiValue) {
+                    BidiClass preceedingStrongBidiClass = isolatingRunSequence.startOfSequene;
+                    for (int beforeBracketIndex = bracketIndices.Item1 - 1; beforeBracketIndex >= 0; --beforeBracketIndex) {
+                        BidiClass resolvedBidiClassValue = NXResolveStrongBidiClass(bidiClassValues[beforeBracketIndex]);
                         if (resolvedBidiClassValue != BidiClass.ON) {
-                            foundStrongBidiClassValue = resolvedBidiClassValue;
+                            preceedingStrongBidiClass = resolvedBidiClassValue;
                             break;
                         }
                     }
 
-                    bidiClassValues[bracketIndices.Item1] = foundStrongBidiClassValue;
-                    bidiClassValues[bracketIndices.Item2] = foundStrongBidiClassValue;
+                    BidiClass internalBidiClass = embeddingBidiClass;
+                    if (preceedingStrongBidiClass != embeddingBidiClass) {
+                        internalBidiClass = embeddingBidiClass == BidiClass.L? BidiClass.R : BidiClass.L;
+                    }
+
+                    bidiClassValues[bracketIndices.Item1] = internalBidiClass;
+                    bidiClassValues[bracketIndices.Item2] = internalBidiClass;
                 }
             }
+
+            Console.WriteLine($"After N0 class values: {string.Join(", ", bidiClassValues)}");
 
             // Rule N1.
-            int n1CurrentCharIndex = 0;
-            BidiClass oldResolvedStrongBidiClassValue = isolatingRunSequence.startOfSequene;
-            while (n1CurrentCharIndex < isolatingRunSequence.isolatingRunIndices.Count) {
-                int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[n1CurrentCharIndex];
+            BidiClass startBidiClass = NXResolveStrongBidiClass(isolatingRunSequence.startOfSequene);
+            int niStartIndex = int.MaxValue;
+            for (int relativeCharIndex = 0; relativeCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++relativeCharIndex) {
+                int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[relativeCharIndex];
+                BidiClass resolvedBidiClass = NXResolveStrongBidiClass(bidiClassValues[absoluteCharIndex]);
 
-                int neutralIsolatesStartIndex = n1CurrentCharIndex;
-                while (bidiClassValues[absoluteCharIndex].IsNeutralOrIsolate() && n1CurrentCharIndex < isolatingRunSequence.isolatingRunIndices.Count - 1) {
-                    n1CurrentCharIndex += 1;
-                    absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[n1CurrentCharIndex];
+                // TODO: Consider the EOS bidi value at the end of the isolating run sequence.
+
+                if (resolvedBidiClass.IsStrongBidiClass()) {
+                    if (niStartIndex != int.MaxValue && startBidiClass == resolvedBidiClass) {
+                        for (int iteratedCharIndex = niStartIndex; iteratedCharIndex < relativeCharIndex; ++iteratedCharIndex) {
+                            bidiClassValues[isolatingRunSequence.isolatingRunIndices[iteratedCharIndex]] = resolvedBidiClass;
+                        }
+                    }
+
+                    startBidiClass = resolvedBidiClass;
+                    niStartIndex = int.MaxValue;
                 }
-
-                // We can afford to stop the while loop on the last character even if it's NI because the resolved strong type will
-                // be ON, which means that even then nothing will happen, which is desired.
-                BidiClass resolvedStrongBidiClassValue = NIResolveStrongBidiClass(bidiClassValues[absoluteCharIndex]);
-                if (oldResolvedStrongBidiClassValue == resolvedStrongBidiClassValue && oldResolvedStrongBidiClassValue != BidiClass.ON) {
-                    for (int changedNIIndex = neutralIsolatesStartIndex; changedNIIndex < n1CurrentCharIndex; ++changedNIIndex) {
-                        int absoluteChangedNIIndex = isolatingRunSequence.isolatingRunIndices[changedNIIndex];
-                        bidiClassValues[absoluteChangedNIIndex] = oldResolvedStrongBidiClassValue;
+                else if (resolvedBidiClass.IsNeutralOrIsolate()) {
+                    if (niStartIndex == int.MaxValue) {
+                        niStartIndex = relativeCharIndex;
                     }
                 }
-
-                n1CurrentCharIndex += 1;
+                else {
+                    niStartIndex = int.MaxValue;
+                }
             }
+
+            Console.WriteLine($"After N1 class values: {string.Join(", ", bidiClassValues)}");
 
             // Rule N2.
             foreach (int absoluteCharIndex in isolatingRunSequence.isolatingRunIndices) {
@@ -273,13 +319,16 @@ public static class UniBidi
                 }
             }
 
+            Console.WriteLine($"After N2 class values: {string.Join(", ", bidiClassValues)}");
+
             // Rules I1 & I2.
             // Important: From now on we can't use the isolating run sequence's embedding value, because it may not represent all characters inside of it.
             foreach (int absoluteCharIndex in isolatingRunSequence.isolatingRunIndices) {
                 BidiClass currentBidiClassValue = bidiClassValues[absoluteCharIndex];
+                uint currentEmbeddingValue = embeddingValues[absoluteCharIndex];
 
                 // I1.
-                if (isolatingRunSequence.embdeddingLevel % 2 == LTR_DEFAULT_EMBEDDING_LEVEL) {
+                if (currentEmbeddingValue % 2 == LTR_DEFAULT_EMBEDDING_LEVEL) {
                     if (currentBidiClassValue == BidiClass.R) {
                         embeddingValues[absoluteCharIndex] += 1;
                     } else if (currentBidiClassValue == BidiClass.AN || currentBidiClassValue == BidiClass.EN) {
@@ -293,6 +342,8 @@ public static class UniBidi
                     }
                 }
             }
+
+            Console.WriteLine($"After I1/2 class values: {string.Join(", ", bidiClassValues)}");
         }
     }
 
@@ -301,19 +352,22 @@ public static class UniBidi
         List<ArraySegment<uint>> levelRuns = new();
         if (inString.Length != embeddingValues.Length) return levelRuns;
 
-        int currentLevelRunStartIndex = int.MaxValue;
-        for (int currentIndex = 0; currentIndex < inString.Length; ++currentIndex) {
-            // If starting a level run.
-            if (currentIndex == 0 || embeddingValues[currentIndex] != embeddingValues[currentIndex - 1]) {
-                if (currentLevelRunStartIndex != int.MaxValue) throw new Exception("Can't start a level run where one already exists");
-                currentLevelRunStartIndex = currentIndex;
-            }
-            // If closing a level run.
-            else if (currentIndex == inString.Length - 1 || embeddingValues[currentIndex] != embeddingValues[currentIndex + 1]) {
-                if (currentLevelRunStartIndex == int.MaxValue) throw new Exception("Can't end a non-existant level run");
+        // TODO: Got a bug here, the exception is triggered in some tests.
 
-                levelRuns.Add(new ArraySegment<uint>(inString, currentLevelRunStartIndex, currentIndex - currentLevelRunStartIndex));
+        int currentLevelRunStartIndex = int.MaxValue;
+        uint currentLevelRunEmbeddingValue = uint.MaxValue;
+
+        for (int currentIndex = 0; currentIndex < inString.Length; ++currentIndex) {
+            uint currentEmbeddingValue = embeddingValues[currentIndex];
+            if (currentLevelRunStartIndex == int.MaxValue) {
+                currentLevelRunStartIndex = currentIndex;
+                currentLevelRunEmbeddingValue = currentEmbeddingValue;
+            }
+            else if (currentEmbeddingValue != currentLevelRunEmbeddingValue || currentIndex == inString.Length -1) {
+                levelRuns.Add(new ArraySegment<uint>(inString, currentLevelRunStartIndex, currentIndex - currentLevelRunStartIndex + 1));
+
                 currentLevelRunStartIndex = int.MaxValue;
+                currentLevelRunEmbeddingValue = uint.MaxValue;
             }
         }
 
@@ -323,6 +377,11 @@ public static class UniBidi
     // According to BD13, using values calculated from X1-X9. TODO: Probably got a bug here lol.
     static List<IsolatingRunSequence> GetIsolatingRunLevels(uint[] inString, uint[] embeddingValues, BidiClass[] bidiClassValues, uint paragraphEmbeddingLevel) {
         List<ArraySegment<uint>> levelRuns = GetLevelRuns(inString, embeddingValues);
+
+        Console.WriteLine("Level Runs:");
+        foreach (ArraySegment<uint> levelRun in levelRuns) {
+            Console.WriteLine($"{levelRun.Offset} - {levelRun.Count + levelRun.Offset - 1}");
+        }
 
         // TODO: Finding PDI vailidity is dumb and really wasteful because I am doing it in the explicit resolve already.
         // TODO: I should REALLY use it instead of doing it AGAIN here.
@@ -587,6 +646,8 @@ public static class UniBidi
             BidiClass currentBidiClass = BidiMap.GetBidiClass(currentChar);
             uint newCurrentEmbeddedLevel = uint.MaxValue;
 
+            Console.WriteLine($"{currentIndex} Directional stack status: {directionalStack.Peek().embeddingLevel}, {directionalStack.Peek().directionalOverrideStatus}, {directionalStack.Peek().directionalIsolateStatus}");
+
             switch (currentBidiClass) {
             // According to X2 - X5.
             case BidiClass.RLE:
@@ -604,7 +665,7 @@ public static class UniBidi
             // According to X5c.
             case BidiClass.FSI:
                 // TODO: Really inefficient, need to provide better enumerable support so that recreating the array will not be needed.
-                ArraySegment<uint> isolatedString = new(inString, currentIndex, GetMatchingPDIIndex(inString, currentIndex));
+                ArraySegment<uint> isolatedString = new(inString, currentIndex, GetMatchingPDIIndex(inString, currentIndex) - currentIndex);
                 uint nextEmbeddingLevel = GetParagraphEmbeddingLevel(isolatedString.ToArray());
                 if (nextEmbeddingLevel == RTL_DEFAULT_EMBEDDING_LEVEL) {
                     currentBidiClass = BidiClass.RLI;
