@@ -1,6 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 using System.ComponentModel;
 using System.Text;
+using System.Runtime;
 
 [assembly: InternalsVisibleTo("UniBidiTests")]
 
@@ -126,7 +127,8 @@ public static class UniBidi
         uint paragraphEmbeddingLevel = givenParagraphEmbedding switch {
             TextDirection.LTR => LTR_DEFAULT_EMBEDDING_LEVEL,
             TextDirection.RTL => RTL_DEFAULT_EMBEDDING_LEVEL,
-            TextDirection.NEUTRAL => GetParagraphEmbeddingLevel(logicalString)
+            TextDirection.NEUTRAL => GetParagraphEmbeddingLevel(logicalString),
+            _ => throw new InvalidOperationException()
         };
 
         Console.WriteLine($"Paragraph embedding level: {paragraphEmbeddingLevel}");
@@ -225,7 +227,7 @@ public static class UniBidi
     }
 
     // According to BD16.
-    static List<(int, int)> GetBracketPairs(IsolatingRunSequence isolatingRunSequence, uint[] logicalString, BidiClass[] bidiClasses) {
+    static List<(int, int)> GetBracketPairs(IsolatingRunSequence isolatingRunSequence, Span<uint> logicalString, BidiClass[] bidiClasses) {
         // Holds the the index of the opening bracket and the bracket that is paired to it, at that order.
         List<(int, uint)> bracketStack = new();
 
@@ -709,7 +711,7 @@ public static class UniBidi
     }
 
     // Trying to separate X1 - X9 rules to a different scope.
-    static BidiStringData ResolveExplicit(uint[] inString, uint paragraphEmbeddingLevel) {
+    static BidiStringData ResolveExplicit(Span<uint> inString, uint paragraphEmbeddingLevel) {
         // TODO: Make max size be MAX_SIZE (125) + 2 according to 3.3.2.
         Stack<DirectionalStatus> directionalStack = new();
 
@@ -751,11 +753,10 @@ public static class UniBidi
                 break;
             // According to X5c.
             case BidiClass.FSI:
-                // TODO: Really inefficient, need to provide better enumerable support so that recreating the array will not be needed.
-                // TODO: Also handle the case in which the FSI is invalid (GetMatchingPDIIndex is MaxValue).
+                // TODO: Handle the case in which the FSI is invalid (GetMatchingPDIIndex is MaxValue).
                 Console.WriteLine($"FSI Information: {currentIndex}, {GetMatchingPDIIndex(inString, currentIndex)}");
-                ArraySegment<uint> isolatedString = new(inString, currentIndex, GetMatchingPDIIndex(inString, currentIndex) - currentIndex + 1);
-                uint nextEmbeddingLevel = GetParagraphEmbeddingLevel(isolatedString.ToArray());
+                Span<uint> isolatedStringSpan = inString.Slice(currentIndex, GetMatchingPDIIndex(inString, currentIndex) - currentIndex + 1);
+                uint nextEmbeddingLevel = GetParagraphEmbeddingLevel(isolatedStringSpan);
                 if (nextEmbeddingLevel == RTL_DEFAULT_EMBEDDING_LEVEL) {
                     currentBidiClass = BidiClass.RLI;
                 } else if (nextEmbeddingLevel == LTR_DEFAULT_EMBEDDING_LEVEL) {
@@ -836,7 +837,7 @@ public static class UniBidi
     }
 
     // According to PD2.
-    public static uint GetParagraphEmbeddingLevel(uint[] logicalString) {
+    public static uint GetParagraphEmbeddingLevel(Span<uint> logicalString) {
         int currentCharIndex = 0;
         while (currentCharIndex < logicalString.Length) {
             BidiClass currentBidiClass = BidiMap.GetBidiClass(logicalString[currentCharIndex]);
@@ -865,7 +866,7 @@ public static class UniBidi
         return stringUTF32.ToArray();
     }
 
-    public static string ConvertUInts(uint[] baseString) {
+    public static string ConvertUInts(Span<uint> baseString) {
         LinkedList<byte> resultBytes = new();
         foreach (uint char32 in baseString) {
             foreach (byte charByte in BitConverter.GetBytes(char32))
@@ -878,7 +879,7 @@ public static class UniBidi
     }
 
     // In accordance with BD9.
-    public static int GetMatchingPDIIndex(uint[] logicalString, int startPosition) {
+    public static int GetMatchingPDIIndex(Span<uint> logicalString, int startPosition) {
         BidiClass startBidiType = BidiMap.GetBidiClass(logicalString[startPosition]);
         if (!startBidiType.IsIsolateInitiator()) {
             return int.MaxValue;
@@ -902,7 +903,7 @@ public static class UniBidi
     }
 
     // According to BD10 & BD11.
-    public static int GetMatchingPDFIndex(uint[] logicalString, int startPosition) {
+    public static int GetMatchingPDFIndex(Span<uint> logicalString, int startPosition) {
         BidiClass startBidiType = BidiMap.GetBidiClass(logicalString[startPosition]);
         if (!startBidiType.IsEmbeddingInitiator()) {
             return int.MaxValue;
