@@ -91,6 +91,20 @@ class IsolatingRunSequence {
 
         endOfSequence = higherEmbeddingLevel % 2 == 0 ? BidiClass.L : BidiClass.R;
     }
+
+    public delegate bool IsolatingRunSequenceIterated(BidiStringData bidiData, int absoluteIndex);
+
+    public void IterateForward(BidiStringData bidiData, int relativeStartIndex, IsolatingRunSequenceIterated iterateForward) {
+        for (int relativeIndex = relativeStartIndex; relativeIndex < this.isolatingRunIndices.Count; ++relativeIndex) {
+            if (!iterateForward(bidiData, this.isolatingRunIndices[relativeIndex])) break;
+        }
+    }
+
+    public void IterateBackward(BidiStringData bidiData, int relativeStartIndex, IsolatingRunSequenceIterated iterateForward) {
+        for (int relativeIndex = relativeStartIndex; relativeIndex >= 0; --relativeIndex) {
+            if (!iterateForward(bidiData, this.isolatingRunIndices[relativeIndex])) break;
+        }
+    }
 }
 
 public static class UniBidi
@@ -123,10 +137,13 @@ public static class UniBidi
         Console.WriteLine($"Isolating runs embedding values: {string.Join(", ", bidiData.embeddingLevels)}");
 
         List<IsolatingRunSequence> isolatingRuns = GetIsolatingRunSequences(bidiData);
-        ResolveX10(isolatingRuns, bidiData.bidiClasses);
+
+        // A part of X10.
+        ResolveWX(isolatingRuns, bidiData);
 
         Console.WriteLine($"Intermediate class values: {string.Join(", ", bidiData.bidiClasses)}");
 
+        // A part of X10.
         ResolveNX(isolatingRuns, bidiData);
 
         uint[] outputLogicalString = ReorderString(bidiData, mirrorCharacters);
@@ -502,132 +519,133 @@ public static class UniBidi
         return isolationRunSequences;
     }
 
-    // X10 seems compilcated, I better do it in its own scope.
-    static void ResolveX10(List<IsolatingRunSequence> isolatingRuns, BidiClass[] bidiClasses) {
-        // The specification explicitly mentions that each W rule must be fully applied on the sequence before the next rule is
-        // evaluated. This means that we need to loop separately for each rule.
+    static void ResolveW1(IsolatingRunSequence isolatingRunSequence, BidiClass[] bidiClasses) {
+        for (int currentCharIndex = 0; currentCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++currentCharIndex) {
+            int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex];
 
-        // TODO: Generally The N and I rules are also part of X10. Putting them in the method is counter-intuitive, so separate
-        // TODO: X10's methods to apply W, N and I rules and call them from here or from the original method.
-
-        // Rule W1.
-        foreach (var isolatingRunSequence in isolatingRuns) {
-            for (int currentCharIndex = 0; currentCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++currentCharIndex) {
-                int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex];
-
-                if (bidiClasses[absoluteCharIndex] == BidiClass.NSM) {
-                    if (currentCharIndex == 0) {
-                        bidiClasses[absoluteCharIndex] = isolatingRunSequence.startOfSequene;
+            if (bidiClasses[absoluteCharIndex] == BidiClass.NSM) {
+                if (currentCharIndex == 0) {
+                    bidiClasses[absoluteCharIndex] = isolatingRunSequence.startOfSequene;
+                } else {
+                    int previousCharAbsoluteIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex - 1];
+                    BidiClass previousCharType = bidiClasses[previousCharAbsoluteIndex];
+                    if (previousCharType.IsIsolateInitiator() || previousCharType == BidiClass.PDI) {
+                        bidiClasses[absoluteCharIndex] = BidiClass.ON;
                     } else {
-                        int previousCharAbsoluteIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex - 1];
-                        BidiClass previousCharType = bidiClasses[previousCharAbsoluteIndex];
-                        if (previousCharType.IsIsolateInitiator() || previousCharType == BidiClass.PDI) {
-                            bidiClasses[absoluteCharIndex] = BidiClass.ON;
-                        } else {
-                            bidiClasses[absoluteCharIndex] = previousCharType;
-                        }
+                        bidiClasses[absoluteCharIndex] = previousCharType;
                     }
                 }
             }
         }
+    }
 
-        // Rule W2.
-        foreach (var isolatingRunSequence in isolatingRuns) {
-            BidiClass lastStrongBidiClassValue = isolatingRunSequence.startOfSequene;
-            for (int currentCharIndex = 0; currentCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++currentCharIndex) {
-                int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex];
-                BidiClass currentBidiClassValue = bidiClasses[absoluteCharIndex];
+    static void ResolveW2(IsolatingRunSequence isolatingRunSequence, BidiClass[] bidiClasses) {
+        BidiClass lastStrongBidiClassValue = isolatingRunSequence.startOfSequene;
+        for (int currentCharIndex = 0; currentCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++currentCharIndex) {
+            int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex];
+            BidiClass currentBidiClassValue = bidiClasses[absoluteCharIndex];
 
-                if (currentBidiClassValue.IsStrongBidiClass()) {
-                    lastStrongBidiClassValue = currentBidiClassValue;
-                }
-                else if (currentBidiClassValue == BidiClass.EN) {
-                    if (lastStrongBidiClassValue == BidiClass.AL) {
-                        bidiClasses[absoluteCharIndex] = BidiClass.AN;
-                    }
-                }
+            if (currentBidiClassValue.IsStrongBidiClass()) {
+                lastStrongBidiClassValue = currentBidiClassValue;
             }
-        }
-
-        // Rule W3.
-        foreach (var isolatingRunSequence in isolatingRuns) {
-            for (int currentCharIndex = 0; currentCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++currentCharIndex) {
-                int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex];
-                if (bidiClasses[absoluteCharIndex] == BidiClass.AL) {
-                    bidiClasses[absoluteCharIndex] = BidiClass.R;
-                }
-            }
-        }
-
-        // Rule W4.
-        foreach (var isolatingRunSequence in isolatingRuns) {
-            for (int currentCharIndex = 1; currentCharIndex < isolatingRunSequence.isolatingRunIndices.Count - 1; ++currentCharIndex) {
-                int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex];
-                BidiClass currentCharType = bidiClasses[absoluteCharIndex];
-
-                if (currentCharType != BidiClass.ES && currentCharType != BidiClass.CS) continue;
-
-                int previousCharAbsoluteIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex - 1];
-                int nextCharAbsoluteIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex + 1];
-
-                BidiClass previousCharType = bidiClasses[previousCharAbsoluteIndex];
-                BidiClass nextCharType = bidiClasses[nextCharAbsoluteIndex];
-
-                if (previousCharType != nextCharType) continue;
-
-                if (nextCharType == BidiClass.EN) {
-                    bidiClasses[absoluteCharIndex] = BidiClass.EN;
-                } else if (currentCharType == BidiClass.CS && nextCharType == BidiClass.AN) {
+            else if (currentBidiClassValue == BidiClass.EN) {
+                if (lastStrongBidiClassValue == BidiClass.AL) {
                     bidiClasses[absoluteCharIndex] = BidiClass.AN;
                 }
             }
         }
+    }
 
-        // Rule W5.
-        foreach (var isolatingRunSequence in isolatingRuns) {
-            for (int currentCharIndex = 0; currentCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++currentCharIndex) {
-                int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex];
-                if (bidiClasses[absoluteCharIndex] != BidiClass.EN) continue;
-
-                for (int iteratedCharIndex = currentCharIndex; iteratedCharIndex >= 0; --iteratedCharIndex) {
-                    int absoluteIteratedCharIndex = isolatingRunSequence.isolatingRunIndices[iteratedCharIndex];
-                    if (bidiClasses[absoluteIteratedCharIndex] == BidiClass.ET) {
-                        bidiClasses[absoluteIteratedCharIndex] = BidiClass.EN;
-                    } else break;
-                }
-                for (int iteratedCharIndex = currentCharIndex; iteratedCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++iteratedCharIndex) {
-                    int absoluteIteratedCharIndex = isolatingRunSequence.isolatingRunIndices[iteratedCharIndex];
-                    if (bidiClasses[absoluteIteratedCharIndex] == BidiClass.ET) {
-                        bidiClasses[absoluteIteratedCharIndex] = BidiClass.EN;
-                    } else break;
-                }
-            }
+    static bool ResolveW3(BidiStringData bidiData, int absoluteCharIndex) {
+        if (bidiData.bidiClasses[absoluteCharIndex] == BidiClass.AL) {
+            bidiData.bidiClasses[absoluteCharIndex] = BidiClass.R;
         }
 
-        // Rule W6.
-        foreach (var isolatingRunSequence in isolatingRuns) {
-            for (int currentCharIndex = 0; currentCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++currentCharIndex) {
-                int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex];
-                if (bidiClasses[absoluteCharIndex].IsSeparator() || bidiClasses[absoluteCharIndex] == BidiClass.ET) {
-                    bidiClasses[absoluteCharIndex] = BidiClass.ON;
-                }
+        return true;
+    }
+
+    static void ResolveW4(IsolatingRunSequence isolatingRunSequence, BidiClass[] bidiClasses) {
+        for (int currentCharIndex = 1; currentCharIndex < isolatingRunSequence.isolatingRunIndices.Count - 1; ++currentCharIndex) {
+            int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex];
+            BidiClass currentCharType = bidiClasses[absoluteCharIndex];
+
+            if (currentCharType != BidiClass.ES && currentCharType != BidiClass.CS) continue;
+
+            int previousCharAbsoluteIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex - 1];
+            int nextCharAbsoluteIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex + 1];
+
+            BidiClass previousCharType = bidiClasses[previousCharAbsoluteIndex];
+            BidiClass nextCharType = bidiClasses[nextCharAbsoluteIndex];
+
+            if (previousCharType != nextCharType) continue;
+
+            if (nextCharType == BidiClass.EN) {
+                bidiClasses[absoluteCharIndex] = BidiClass.EN;
+            } else if (currentCharType == BidiClass.CS && nextCharType == BidiClass.AN) {
+                bidiClasses[absoluteCharIndex] = BidiClass.AN;
             }
         }
+    }
 
-        // Rule W7.
-        foreach (var isolatingRunSequence in isolatingRuns) {
-            BidiClass lastStrongBidiClassValue = isolatingRunSequence.startOfSequene;
-            for (int currentCharIndex = 0; currentCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++currentCharIndex) {
-                int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex];
-                BidiClass currentBidiClassValue = bidiClasses[absoluteCharIndex];
+    static void ResolveW5(IsolatingRunSequence isolatingRunSequence, BidiClass[] bidiClasses) {
+        for (int currentCharIndex = 0; currentCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++currentCharIndex) {
+            int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex];
+            if (bidiClasses[absoluteCharIndex] != BidiClass.EN) continue;
 
-                if (currentBidiClassValue.IsStrongBidiClass()) {
-                    lastStrongBidiClassValue = currentBidiClassValue;
-                }
-                else if (currentBidiClassValue == BidiClass.EN && lastStrongBidiClassValue == BidiClass.L) {
-                    bidiClasses[absoluteCharIndex] = BidiClass.L;
-                }
+            for (int iteratedCharIndex = currentCharIndex; iteratedCharIndex >= 0; --iteratedCharIndex) {
+                int absoluteIteratedCharIndex = isolatingRunSequence.isolatingRunIndices[iteratedCharIndex];
+                if (bidiClasses[absoluteIteratedCharIndex] == BidiClass.ET) {
+                    bidiClasses[absoluteIteratedCharIndex] = BidiClass.EN;
+                } else break;
             }
+            for (int iteratedCharIndex = currentCharIndex; iteratedCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++iteratedCharIndex) {
+                int absoluteIteratedCharIndex = isolatingRunSequence.isolatingRunIndices[iteratedCharIndex];
+                if (bidiClasses[absoluteIteratedCharIndex] == BidiClass.ET) {
+                    bidiClasses[absoluteIteratedCharIndex] = BidiClass.EN;
+                } else break;
+            }
+        }
+    }
+
+    static bool ResolveW6(BidiStringData bidiData, int absoluteCharIndex) {
+        if (bidiData.bidiClasses[absoluteCharIndex].IsSeparator() || bidiData.bidiClasses[absoluteCharIndex] == BidiClass.ET) {
+            bidiData.bidiClasses[absoluteCharIndex] = BidiClass.ON;
+        }
+
+        return true;
+    }
+
+    static void ResolveW7(IsolatingRunSequence isolatingRunSequence, BidiClass[] bidiClasses) {
+        BidiClass lastStrongBidiClassValue = isolatingRunSequence.startOfSequene;
+        for (int currentCharIndex = 0; currentCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++currentCharIndex) {
+            int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex];
+            BidiClass currentBidiClassValue = bidiClasses[absoluteCharIndex];
+
+            if (currentBidiClassValue.IsStrongBidiClass()) {
+                lastStrongBidiClassValue = currentBidiClassValue;
+            }
+            else if (currentBidiClassValue == BidiClass.EN && lastStrongBidiClassValue == BidiClass.L) {
+                bidiClasses[absoluteCharIndex] = BidiClass.L;
+            }
+        }
+    }
+
+    // Apply the W1-W7 rules on the bidi data.
+    static void ResolveWX(List<IsolatingRunSequence> isolatingRuns, BidiStringData bidiData) {
+        foreach (IsolatingRunSequence isolatingRunSequence in isolatingRuns) {
+            ResolveW1(isolatingRunSequence, bidiData.bidiClasses);
+
+            ResolveW2(isolatingRunSequence, bidiData.bidiClasses);
+
+            isolatingRunSequence.IterateForward(bidiData, 0, ResolveW3);
+
+            ResolveW4(isolatingRunSequence, bidiData.bidiClasses);
+
+            ResolveW5(isolatingRunSequence, bidiData.bidiClasses);
+
+            isolatingRunSequence.IterateForward(bidiData, 0, ResolveW6);
+
+            ResolveW7(isolatingRunSequence, bidiData.bidiClasses);
         }
     }
 
