@@ -4,20 +4,34 @@
     <TargetFramework>net8.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <GeneratedDir>$(ProjectDir)Generated\</GeneratedDir>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="Mono.TextTemplating" Version="2.3.1" />
-    <TextTemplate Include="**\*.tt" />
-    <Generated Include="**\*.Generated.cs" />
   </ItemGroup>
 
-  <Target Name="TextTemplateTransform" BeforeTargets="BeforeBuild">
-    <Exec WorkingDirectory="$(ProjectDir)" Command="dotnet t4 %(TextTemplate.Identity) -o %(TextTemplate.Filename).Generated.cs" />
+  <ItemGroup>
+    <BidiDataTemplate Include="BidiData\*.tt" output="$(GeneratedDir)%(Filename).Generated.cs" />
+    <GeneratedFiles Include="**\*.Generated.cs" />
+  </ItemGroup>
+
+  <Target Name="MakeGeneratedDir" BeforeTargets="GenerateBidiData">
+    <MakeDir Directories="$(GeneratedDir)" Condition="!Exists('$(GeneratedDir)')" />
   </Target>
 
-  <Target Name="TextTemplateClean" AfterTargets="Clean">
-    <Delete Files="@(Generated)" />
+  <Target Name="GenerateBidiData" Inputs="@(BidiDataTemplate)" Outputs="%(output)" BeforeTargets="BeforeBuild">
+    <Message Text="Generating '%(BidiDataTemplate.Identity)' to '%(BidiDataTemplate.output)'" />
+    <Exec WorkingDirectory="$(ProjectDir)" Command="dotnet t4 %(BidiDataTemplate.Identity) -o %(BidiDataTemplate.output)" />
+
+    <ItemGroup>
+      <Compile Include="%(BidiDataTemplate.output)" KeepDuplicates="false" />
+    </ItemGroup>
+  </Target>
+
+
+  <Target Name="GeneratedClean" AfterTargets="Clean">
+    <Delete Files="@(GeneratedFiles)" />
   </Target>
 
 </Project>

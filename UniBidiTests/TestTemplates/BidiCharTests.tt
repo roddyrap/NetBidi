@@ -27,8 +27,7 @@ string GetWebFile(string url) {
 }#>
 <#
 string bidiCharTestsString = GetWebFile("https://www.unicode.org/Public/UCD/latest/ucd/BidiCharacterTest.txt");
-#>
-<#
+
 // Actually parse the tests.
 List<TestData> allTests = new();
 foreach (string line in bidiCharTestsString.Split("\n")) {

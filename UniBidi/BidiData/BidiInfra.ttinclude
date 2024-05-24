@@ -1,0 +1,23 @@
+<#@ template debug="false" hostspecific="false" language="C#" #>
+<#@ output extension=".cs" #>
+<#@ assembly name="System.Net.Http.dll" #>
+<#@ import namespace="System.Net.Http" #>
+<#@ assembly name="System.Runtime" #>
+<#@ import namespace="System.Threading.Tasks" #>
+<#
+// Get the unicode data from the web.
+string GetWebFile(string url) {
+    using (HttpClient client = new())
+    {
+        var httpTask = Task.Run(() => client.GetAsync(url)); 
+        httpTask.Wait();
+
+        HttpResponseMessage responseMessage = httpTask.Result ?? throw new Exception("Failed to get unicode file");
+        responseMessage.EnsureSuccessStatusCode();
+        
+        var readTask = Task.Run(() => responseMessage.Content.ReadAsStringAsync());
+        readTask.Wait();
+
+        return readTask.Result;
+    }
+}#>

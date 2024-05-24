@@ -1,0 +1,37 @@
+<#@ template debug="false" hostspecific="false" language="C#" #>
+<#@ output extension=".cs" #>
+<#@ assembly name="System.Collections" #>
+<#@ import namespace="System.Collections.Generic" #>
+<#@ include file="BidiData/BidiInfra.ttinclude" #>
+<#
+string mirroringFileString = GetWebFile("https://www.unicode.org/Public/UCD/latest/ucd/BidiBrackets.txt");
+
+// process the unicode data.
+List<(UInt32, UInt32)> mirrorPairs = new();
+foreach (string line in mirroringFileString.Split('\n')) {
+    if (line.StartsWith('#')) continue;
+
+    string[] splitLine = line.Split(";");
+    if (splitLine.Length < 2) continue;
+
+    mirrorPairs.Add(
+        (
+            Convert.ToUInt32(splitLine[0].Trim(), 16),
+            Convert.ToUInt32(splitLine[1].Trim(), 16)
+        )
+    );
+}
+#>
+// THIS FILE WAS AUTO-GENERATED DIRECTLY FROM UNICODE DATA, DO NOT EDIT MANUALLY!
+namespace UniBidi;
+
+static partial class BidiMap {
+    public static UInt32 GetMirror(UInt32 bidiChar) {
+        return bidiChar switch {
+<# foreach ((UInt32 bidiChar, UInt32 mirrorChar) in mirrorPairs) {#>
+            <#= bidiChar #> => <#= mirrorChar #>,
+<# } #>
+            _ => bidiChar
+        };
+    }
+}

@@ -1,0 +1,53 @@
+<#@ template debug="false" hostspecific="false" language="C#" #>
+<#@ output extension=".cs" #>
+<#@ assembly name="System.Collections" #>
+<#@ import namespace="System.Collections.Generic" #>
+<#@ include file="BidiData/BidiInfra.ttinclude" #>
+<#
+string bracketsFileString = GetWebFile("https://www.unicode.org/Public/UCD/latest/ucd/BidiBrackets.txt");
+
+// process the unicode data.
+List<(UInt32, UInt32, string)> bracketData = new();
+foreach (string line in bracketsFileString.Split('\n')) {
+    if (line.StartsWith('#')) continue;
+
+    var noCommentLine = line.Split("#")[0];
+    string[] splitLine = noCommentLine.Split(";");
+
+    if (splitLine.Length < 3) continue;
+
+    bracketData.Add(
+        (
+            Convert.ToUInt32(splitLine[0].Trim(), 16),
+            Convert.ToUInt32(splitLine[1].Trim(), 16),
+            splitLine[2].Trim() switch {
+                "o" => "OPEN",
+                "c" => "CLOSE",
+                _ => throw new System.ComponentModel.InvalidEnumArgumentException()
+            }
+        )
+    );
+}
+#>
+// THIS FILE WAS AUTO-GENERATED DIRECTLY FROM UNICODE DATA, DO NOT EDIT MANUALLY!
+namespace UniBidi;
+
+static partial class BidiMap {
+    public static uint GetPairedBracket(UInt32 bidiChar) {
+        return bidiChar switch {
+<# foreach ((UInt32 bidiChar, UInt32 pairedBracket, string _) in bracketData) {#>
+            <#= bidiChar #> => <#= pairedBracket #>,
+<# } #>
+            _ => uint.MaxValue
+        };
+    }
+
+    public static BracketType GetBracketType(UInt32 bidiChar) {
+        return bidiChar switch {
+<# foreach ((UInt32 bidiChar, UInt32 _, string bracketType) in bracketData) {#>
+            <#= bidiChar #> => BracketType.<#= bracketType #>,
+<# } #>
+            _ => BracketType.NOT_BRACKET
+        };
+    }
+}

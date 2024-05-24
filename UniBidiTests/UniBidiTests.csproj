@@ -7,21 +7,8 @@
 
     <IsPackable>false</IsPackable>
     <IsTestProject>true</IsTestProject>
+    <GeneratedDir>$(ProjectDir)Generated\</GeneratedDir>
   </PropertyGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Mono.TextTemplating" Version="2.3.1" />
-    <TextTemplate Include="**\*.tt" />
-    <Generated Include="**\*.Generated.cs" />
-  </ItemGroup>
-
-  <Target Name="TextTemplateTransform" BeforeTargets="BeforeBuild">
-    <Exec WorkingDirectory="$(ProjectDir)" Command="dotnet t4 %(TextTemplate.Identity) -o %(TextTemplate.Filename).Generated.cs" />
-  </Target>
-
-  <Target Name="TextTemplateClean" AfterTargets="Clean">
-    <Delete Files="@(Generated)" />
-  </Target>
 
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.6.0" />
@@ -35,4 +22,26 @@
     <ProjectReference Include="..\UniBidi\UniBidi.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="Mono.TextTemplating" Version="2.3.1" />
+    <TestTemplate Include="TestTemplates\*.tt" output="$(GeneratedDir)%(Filename).Generated.cs" />
+    <GeneratedFiles Include="**\*.Generated.cs" />
+  </ItemGroup>
+
+  <Target Name="MakeGeneratedDir" BeforeTargets="GenerateTestTemplates">
+    <MakeDir Directories="$(GeneratedDir)" Condition="!Exists('$(GeneratedDir)')" />
+  </Target>
+
+  <Target Name="GenerateTestTemplates" Inputs="@(TestTemplate)" Outputs="%(output)" BeforeTargets="BeforeBuild">
+    <Message Text="Generating '%(TestTemplate.Identity)' to '%(TestTemplate.output)'" />
+    <Exec WorkingDirectory="$(ProjectDir)" Command="dotnet t4 %(TestTemplate.Identity) -o %(TestTemplate.output)" />
+
+    <ItemGroup>
+      <Compile Include="%(TestTemplate.output)" KeepDuplicates="false" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="GeneratedClean" AfterTargets="Clean">
+    <Delete Files="@(GeneratedFiles)" />
+  </Target>
 </Project>
