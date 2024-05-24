@@ -3,6 +3,7 @@
 <#@ assembly name="System.Collections" #>
 <#@ import namespace="System.Collections.Generic" #>
 <#@ include file="BidiData/BidiInfra.ttinclude" #>
+<#=AutoGenerateComment()#>
 <#
 string mirroringFileString = GetWebFile("https://www.unicode.org/Public/UCD/latest/ucd/BidiBrackets.txt");
 
@@ -22,7 +23,6 @@ foreach (string line in mirroringFileString.Split('\n')) {
     );
 }
 #>
-// THIS FILE WAS AUTO-GENERATED DIRECTLY FROM UNICODE DATA, DO NOT EDIT MANUALLY!
 namespace UniBidi;
 
 static partial class BidiMap {

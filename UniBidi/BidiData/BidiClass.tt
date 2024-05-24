@@ -4,6 +4,7 @@
 <#@ import namespace="System.Collections.Generic" #>
 <#@ assembly name="System.Text.RegularExpressions.dll" #>
 <#@ include file="BidiData/BidiInfra.ttinclude" #>
+<#=AutoGenerateComment()#>
 <#
 string bidiClasssFileString = GetWebFile("https://www.unicode.org/Public/UNIDATA/extracted/DerivedBidiClass.txt");
 
@@ -51,7 +52,6 @@ foreach (string line in bidiClasssFileString.Split('\n')) {
     }
 }
 #>
-// THIS FILE WAS AUTO-GENERATED DIRECTLY FROM UNICODE DATA, DO NOT EDIT MANUALLY!
 namespace UniBidi;
 
 static partial class BidiMap {
