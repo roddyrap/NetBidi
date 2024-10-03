@@ -462,9 +462,16 @@ public static class NetBidi
     }
 
     // Really simple (and wasteful) algorithm, according to BD7.
+    // TODO: The special case for 1-length strings is bullshit and I want to reimplement this method.
     static List<ArraySegment<uint>> GetLevelRuns(BidiStringData bidiData) {
         List<ArraySegment<uint>> levelRuns = new();
         if (bidiData.logicalString.Length != bidiData.embeddingLevels.Length || bidiData.logicalString.Length == 0) return levelRuns;
+
+        // If the string is of length 1, the for loop bellow will never run, and no level run will be created.
+        if (bidiData.logicalString.Length == 1) {
+            levelRuns.Add(new ArraySegment<uint>(bidiData.logicalString, 0, 1));
+            return levelRuns;
+        }
 
         int currentLevelRunStartIndex = 0;
         uint currentLevelRunEmbeddingLevel = bidiData.embeddingLevels[0];
