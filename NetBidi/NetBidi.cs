@@ -85,10 +85,8 @@ class IsolatingRunSequence {
 
         startOfSequene = higherEmbeddingLevel % 2 == 0 ? BidiClass.L : BidiClass.R;
 
-        // It can be inferred from the notes of BD13 that if an isolate initiator has a matching PDI it should always
-        // continue its level run (As a matching PDI by design wil always be right after an isolation sequence end and will
-        // always have the same embedding level as it's initiator). Therefore, if an isolate initiator is at the end of an
-        // isolating run sequence we can assume that it has no matching PDI without needing to check.
+        // BD13 explicitly mentions that if an isolating run sequence ends with an isolate initiator then that isolate
+        // initiator must not have a matching PDI. The behaviour regarding the final character is written in X10. 
         if (runEndIndex == embeddingLevels.Length - 1 || bidiClasses[runEndIndex].IsIsolateInitiator()) {
             higherEmbeddingLevel = (int)Math.Max(paragraphEmbeddingLevel, embeddingLevels[runEndIndex]);
         } else {
@@ -330,7 +328,7 @@ public static class NetBidi
             // N0 mentions that the bracket pairs need to be processed sequentially by the order of the opening paired brackets.
             bracketPairs.Sort((first_pair, second_pair) => first_pair.Item1.CompareTo(second_pair.Item1));
 
-            Console.WriteLine(string.Join(", ", bracketPairs));
+            Console.WriteLine($"Bracket pairs: {string.Join(", ", bracketPairs)}");
             Console.WriteLine($"Isolating run {isolatingRunSequence.isolatingRunIndices.First()} - {isolatingRunSequence.isolatingRunIndices.Last()}; EL: {isolatingRunSequence.embdeddingLevel}");
 
             foreach ((int, int) bracketIndices in bracketPairs) {
@@ -508,7 +506,7 @@ public static class NetBidi
         return levelRuns;
     }
 
-    // According to BD13, using values calculated from X1-X9.
+    // According to BD13, using values calculated from X1-X9. TODO: What is going on in this method?
     static List<IsolatingRunSequence> GetIsolatingRunSequences(BidiStringData bidiData) {
         List<ArraySegment<uint>> levelRuns = GetLevelRuns(bidiData);
 
@@ -530,11 +528,11 @@ public static class NetBidi
             for (int currentCharIndex = 0; currentCharIndex < levelRuns[currentLevelRunIndex].Count; ++currentCharIndex) {
                 int absoluteCharIndex = levelRuns[currentLevelRunIndex].Offset + currentCharIndex;
 
-                Console.WriteLine($"Level Run char index: {absoluteCharIndex} {bidiData.bidiClasses[absoluteCharIndex]} {GetMatchingPDIIndex(bidiData.logicalString, absoluteCharIndex)} {currentCharIndex}/{currentLevelRunIndex}");
+                int matchingPdiIndex = GetMatchingPDIIndex(bidiData.logicalString, absoluteCharIndex);
+                Console.WriteLine($"Level Run char index: {absoluteCharIndex} {bidiData.bidiClasses[absoluteCharIndex]} {matchingPdiIndex} {currentLevelRunIndex}/{currentCharIndex}");
 
                 // Dumb way to add valid PDIs. The current bidi char check happens inside the method, so I don't need to do it here.
                 // TODO: Replace PDI recognition because it's dumb.
-                int matchingPdiIndex = GetMatchingPDIIndex(bidiData.logicalString, absoluteCharIndex);
                 if (matchingPdiIndex != int.MaxValue) {
                     isolateInitiatorToPDI.Add(absoluteCharIndex, matchingPdiIndex);
                 }
@@ -554,7 +552,7 @@ public static class NetBidi
         foreach (ArraySegment<uint> levelRun in levelRuns) {
             int startIndex = levelRun.Offset;
 
-            if (bidiData.GetBidiClass(startIndex) != BidiClass.PDI || !pdiLevelRuns.ContainsValue(startIndex)) {
+            if (bidiData.GetBidiClass(startIndex) != BidiClass.PDI || !isolateInitiatorToPDI.ContainsValue(startIndex)) {
                 List<ArraySegment<uint>> currentIsolationRun = [levelRun];
 
                 while (true) {
@@ -571,6 +569,7 @@ public static class NetBidi
             }
         }
 
+        Console.WriteLine($"Number of isolating run sequences: {isolationRunSequences.Count}");
         return isolationRunSequences;
     }
 
