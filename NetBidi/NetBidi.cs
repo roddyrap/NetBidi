@@ -672,11 +672,7 @@ public static class NetBidi
 
             ResolveW2(isolatingRunSequence, bidiData.bidiClasses);
 
-            Console.WriteLine($"Before W3: {string.Join(", ", bidiData.bidiClasses)}");
-
             ResolveW3(isolatingRunSequence, bidiData.bidiClasses);
-
-            Console.WriteLine($"After W3: {string.Join(", ", bidiData.bidiClasses)}");
 
             ResolveW4(isolatingRunSequence, bidiData.bidiClasses);
 
@@ -795,7 +791,7 @@ public static class NetBidi
                 Console.WriteLine($"FSI Information: {currentIndex}, {GetMatchingPDIIndex(inString, currentIndex)}");
                 matchingPDIIndex = matchingPDIIndex == int.MaxValue ? inString.Length - 1 : matchingPDIIndex;
 
-                Span<uint> isolatedStringSpan = inString.Slice(currentIndex, matchingPDIIndex - currentIndex + 1);
+                Span<uint> isolatedStringSpan = inString.Slice(currentIndex + 1, matchingPDIIndex - currentIndex);
                 uint nextEmbeddingLevel = GetParagraphEmbeddingLevel(isolatedStringSpan);
                 if (nextEmbeddingLevel == RTL_DEFAULT_EMBEDDING_LEVEL) {
                     currentBidiClass = BidiClass.RLI;
