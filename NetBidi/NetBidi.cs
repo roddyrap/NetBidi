@@ -56,7 +56,8 @@ class IsolatingRunSequence {
         return this.isolatingRunIndices.FindIndex(absoluteIndex => absoluteIndex == wantedAbsoluteIndex);
     }
 
-    public IsolatingRunSequence(uint[] embeddingLevels, List<ArraySegment<uint>> runLevelSequence, uint paragraphEmbeddingLevel) {
+    // TODO: Change to take constref of BidiData because at this point I use most of it.
+    public IsolatingRunSequence(uint[] embeddingLevels, BidiClass[] bidiClasses, List<ArraySegment<uint>> runLevelSequence, uint paragraphEmbeddingLevel) {
         // "Unpack" the run level sequence to a one-dimensional array of the isolating level run sequence indices.
         this.isolatingRunIndices = new();
         foreach(var runLevelArray in runLevelSequence) {
@@ -84,7 +85,11 @@ class IsolatingRunSequence {
 
         startOfSequene = higherEmbeddingLevel % 2 == 0 ? BidiClass.L : BidiClass.R;
 
-        if (runEndIndex == embeddingLevels.Length - 1) {
+        // It can be inferred from the notes of BD13 that if an isolate initiator has a matching PDI it should always
+        // continue its level run (As a matching PDI by design wil always be right after an isolation sequence end and will
+        // always have the same embedding level as it's initiator). Therefore, if an isolate initiator is at the end of an
+        // isolating run sequence we can assume that it has no matching PDI without needing to check.
+        if (runEndIndex == embeddingLevels.Length - 1 || bidiClasses[runEndIndex].IsIsolateInitiator()) {
             higherEmbeddingLevel = (int)Math.Max(paragraphEmbeddingLevel, embeddingLevels[runEndIndex]);
         } else {
             higherEmbeddingLevel = (int)Math.Max(embeddingLevels[runEndIndex], embeddingLevels[runEndIndex + 1]);
@@ -392,33 +397,41 @@ public static class NetBidi
             }
 
             Console.WriteLine($"After N0 class values: {string.Join(", ", bidiData.bidiClasses)}");
+            Console.WriteLine($"Isolating run start/end: {isolatingRunSequence.startOfSequene}/{isolatingRunSequence.endOfSequence}");
 
-            // Rule N1.
+            // Rule N1. TODO: This is an extremely bad implementation that I MUST change in the future.
             BidiClass startBidiClass = NXResolveStrongBidiClass(isolatingRunSequence.startOfSequene);
-            int niStartIndex = int.MaxValue;
+            (int, BidiClass)? lastStrongChar = (-1, startBidiClass);
+            
             for (int relativeCharIndex = 0; relativeCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++relativeCharIndex) {
                 int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[relativeCharIndex];
-                BidiClass resolvedBidiClass = NXResolveStrongBidiClass(bidiData.bidiClasses[absoluteCharIndex]);
 
-                // TODO: Consider the EOS bidi value at the end of the isolating run sequence.
+                BidiClass currentBidiClass = bidiData.bidiClasses[absoluteCharIndex];
+                BidiClass resolvedBidiClass = NXResolveStrongBidiClass(currentBidiClass);
+
+                if (currentBidiClass.IsNeutralOrIsolate()) {
+                    if (relativeCharIndex == isolatingRunSequence.isolatingRunIndices.Count - 1) {
+                        relativeCharIndex += 1;
+                        currentBidiClass = isolatingRunSequence.endOfSequence;
+                        resolvedBidiClass = NXResolveStrongBidiClass(isolatingRunSequence.endOfSequence);
+                    }
+                    else {
+                        continue;
+                    }
+                }
 
                 if (resolvedBidiClass.IsStrongBidiClass()) {
-                    if (niStartIndex != int.MaxValue && startBidiClass == resolvedBidiClass) {
-                        for (int iteratedCharIndex = niStartIndex; iteratedCharIndex < relativeCharIndex; ++iteratedCharIndex) {
-                            bidiData.bidiClasses[isolatingRunSequence.isolatingRunIndices[iteratedCharIndex]] = resolvedBidiClass;
+                    if (lastStrongChar.HasValue && lastStrongChar?.Item2 == resolvedBidiClass) {
+                        for (int iteratedIndex = lastStrongChar.Value.Item1 + 1; iteratedIndex < relativeCharIndex; ++ iteratedIndex) {
+                            int absoluteIteratedIndex = isolatingRunSequence.isolatingRunIndices[iteratedIndex];
+                            bidiData.bidiClasses[absoluteIteratedIndex] = resolvedBidiClass;
                         }
                     }
 
-                    startBidiClass = resolvedBidiClass;
-                    niStartIndex = int.MaxValue;
-                }
-                else if (resolvedBidiClass.IsNeutralOrIsolate()) {
-                    if (niStartIndex == int.MaxValue) {
-                        niStartIndex = relativeCharIndex;
-                    }
+                    lastStrongChar = (relativeCharIndex, resolvedBidiClass);
                 }
                 else {
-                    niStartIndex = int.MaxValue;
+                    lastStrongChar = null;
                 }
             }
 
@@ -554,7 +567,7 @@ public static class NetBidi
                     }
                 }
 
-                isolationRunSequences.Add(new IsolatingRunSequence(bidiData.embeddingLevels, currentIsolationRun, bidiData.paragraphEmbeddingLevel));
+                isolationRunSequences.Add(new IsolatingRunSequence(bidiData.embeddingLevels, bidiData.bidiClasses, currentIsolationRun, bidiData.paragraphEmbeddingLevel));
             }
         }
 
@@ -795,7 +808,6 @@ public static class NetBidi
             case BidiClass.FSI:
                 // If there is no matching PDI use the span until the end of the string.
                 int matchingPDIIndex = GetMatchingPDIIndex(inString, currentIndex);
-                Console.WriteLine($"FSI Information: {currentIndex}, {GetMatchingPDIIndex(inString, currentIndex)}");
                 matchingPDIIndex = matchingPDIIndex == int.MaxValue ? inString.Length - 1 : matchingPDIIndex;
 
                 Span<uint> isolatedStringSpan = inString.Slice(currentIndex + 1, matchingPDIIndex - currentIndex);
@@ -808,6 +820,7 @@ public static class NetBidi
                     throw new InvalidEnumArgumentException();
                 }
 
+                Console.WriteLine($"FSI Information: {currentIndex}, {GetMatchingPDIIndex(inString, currentIndex)}, Direction: {currentBidiClass}");
                 HandleIsolate(ref currentBidiClass, directionalStack, ref overflowIsolateCount, ref overflowEmbeddingCount,
                             ref validIsolateCount, ref newCurrentEmbeddedLevel);
                 break;
