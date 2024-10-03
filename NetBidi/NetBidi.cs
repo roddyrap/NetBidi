@@ -6,7 +6,7 @@ using BidiReturnData = (uint[] visualString, uint[] embeddingLevels);
 
 [assembly: InternalsVisibleTo("NetBidiTests")]
 
-namespace UniBidi;
+namespace NetBidi;
 
 public enum TextDirection {
     LTR,
@@ -94,7 +94,7 @@ class IsolatingRunSequence {
     }
 }
 
-public static class UniBidi
+public static class NetBidi
 {
     // According to BD2.
     public const uint MAX_DPETH = 125;

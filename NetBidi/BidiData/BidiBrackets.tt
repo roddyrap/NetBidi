@@ -30,7 +30,7 @@ foreach (string line in bracketsFileString.Split('\n')) {
     );
 }
 #>
-namespace UniBidi;
+namespace NetBidi;
 
 static partial class BidiMap {
     public static uint GetPairedBracket(UInt32 bidiChar) {

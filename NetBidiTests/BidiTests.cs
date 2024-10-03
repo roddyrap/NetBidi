@@ -3,7 +3,7 @@ using Xunit.Abstractions;
 
 using System;
 using NetBidiTests;
-using UniBidi;
+using NetBidi;
 
 namespace NetBidiTests;
 
@@ -20,7 +20,7 @@ public class BidiTests(ITestOutputHelper output)
         // output.WriteLine($"Expected output: {string.Join(" ", testOutput.Select(x => x.ToString("X4")))}");
 
         // The unicode test don't support character mirroring.
-        var (visualString, embeddingLevels) = UniBidi.UniBidi.BidiResolveStringEx(input, paragraphEmbeddingLevel, false);
+        var (visualString, embeddingLevels) = NetBidi.NetBidi.BidiResolveStringEx(input, paragraphEmbeddingLevel, false);
 
         Assert.Equal(expectedEmbeddingLevels, embeddingLevels);
         Assert.Equal(expectedOutput, visualString);

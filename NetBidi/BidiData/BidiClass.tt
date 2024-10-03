@@ -52,7 +52,7 @@ foreach (string line in bidiClasssFileString.Split('\n')) {
     }
 }
 #>
-namespace UniBidi;
+namespace NetBidi;
 
 static partial class BidiMap {
     public const string UNICODE_VERSION = "<#= unicodeVersion #>";

@@ -1,4 +1,4 @@
-namespace UniBidi;
+namespace NetBidi;
 
 public enum BracketType : byte {
     CLOSE,

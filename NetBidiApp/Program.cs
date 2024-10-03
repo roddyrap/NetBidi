@@ -1,5 +1,5 @@
 ﻿using System;
-using UniBidi;
+using NetBidi;
 using Mono.Options;
 using System.Text;
 
@@ -74,8 +74,8 @@ namespace NetBidiApp
                 inputText = File.ReadAllText(filename);
             }
 
-            uint[] logicalString = UniBidi.UniBidi.ConvertString(inputText);
-            string displayString = UniBidi.UniBidi.BidiResolveString(logicalString, textDirection);
+            uint[] logicalString = NetBidi.NetBidi.ConvertString(inputText);
+            string displayString = NetBidi.NetBidi.BidiResolveString(logicalString, textDirection);
             Console.WriteLine(EncodeNonAsciiCharacters(displayString));
         }
     }

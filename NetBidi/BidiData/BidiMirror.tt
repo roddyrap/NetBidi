@@ -23,7 +23,7 @@ foreach (string line in mirroringFileString.Split('\n')) {
     );
 }
 #>
-namespace UniBidi;
+namespace NetBidi;
 
 static partial class BidiMap {
     public static UInt32 GetMirror(UInt32 bidiChar) {

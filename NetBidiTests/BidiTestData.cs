@@ -1,4 +1,4 @@
-using UniBidi;
+using NetBidi;
 
 namespace NetBidiTests;
 
