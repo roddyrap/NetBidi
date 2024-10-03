@@ -403,5 +403,4 @@ FodyWeavers.xsd
 
 # Generated template file.
 *.Generated.cs
-UniBidiTests/Generated/
 UniBidi/Generated/
