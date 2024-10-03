@@ -16,31 +16,22 @@ public enum TextDirection {
 }
 
 // According to the 3.3.2 specification of applying the X rules.
-class DirectionalStatus(uint embeddingLevel, TextDirection directionalOverrideStatus, bool directionalIsolateStatus)
-{
+class DirectionalStatus(uint embeddingLevel, TextDirection directionalOverrideStatus, bool directionalIsolateStatus) {
     public uint embeddingLevel = embeddingLevel;
     public TextDirection directionalOverrideStatus = directionalOverrideStatus;
     public bool directionalIsolateStatus = directionalIsolateStatus;
 }
 
-class BidiStringData {
-    public uint[] logicalString;
+class BidiStringData(uint[] logicalString, uint paragraphEmbeddingLevel, uint[] embeddingLevels, BidiClass[] bidiClasses) {
+    public uint[] logicalString = logicalString;
 
-    public uint paragraphEmbeddingLevel;
+    public uint paragraphEmbeddingLevel = paragraphEmbeddingLevel;
 
-    public uint[] embeddingLevels;
-    public BidiClass[] bidiClasses;
-
-    public BidiStringData(uint[] logicalString, uint paragraphEmbeddingLevel, uint[] embeddingLevels, BidiClass[] bidiClasses) {
-        this.logicalString = logicalString;
-        this.paragraphEmbeddingLevel = paragraphEmbeddingLevel;
-
-        this.embeddingLevels = embeddingLevels;
-        this.bidiClasses = bidiClasses;
-    }
+    public uint[] embeddingLevels = embeddingLevels;
+    public BidiClass[] bidiClasses = bidiClasses;
 
     public BidiClass GetBidiClass(int characterIndex) {
-        return BidiMap.GetBidiClass(this.logicalString[characterIndex]);
+        return BidiMap.GetBidiClass(logicalString[characterIndex]);
     }
 }
 
@@ -50,15 +41,14 @@ class IsolatingRunSequence {
     public BidiClass endOfSequence;
 
     // BD13 explicitly mentions that all level runs in an isolating run sequences have the same embedding level, so
-    // there's no reason not to expose it to the user.
+    // there's no reason not tconst o expose it to the user.
     public uint embdeddingLevel;
 
     public int GetRelativeIndex(int wantedAbsoluteIndex) {
         return this.isolatingRunIndices.FindIndex(absoluteIndex => absoluteIndex == wantedAbsoluteIndex);
     }
 
-    // TODO: Change to take constref of BidiData because at this point I use most of it.
-    public IsolatingRunSequence(uint[] embeddingLevels, BidiClass[] bidiClasses, List<ArraySegment<uint>> runLevelSequence, uint paragraphEmbeddingLevel) {
+    public IsolatingRunSequence(BidiStringData bidiData, List<ArraySegment<uint>> runLevelSequence) {
         // "Unpack" the run level sequence to a one-dimensional array of the isolating level run sequence indices.
         this.isolatingRunIndices = new();
         foreach(var runLevelArray in runLevelSequence) {
@@ -71,7 +61,7 @@ class IsolatingRunSequence {
         this.isolatingRunIndices.Sort();
 
         // This assignment should work because all level runs have the same embedding level.
-        this.embdeddingLevel = embeddingLevels[this.isolatingRunIndices[0]];
+        this.embdeddingLevel = bidiData.embeddingLevels[this.isolatingRunIndices[0]];
 
         // Calculate the start-of-sequence (sos) and end-of-sequence (eos) values according to X10.
         int runStartIndex = this.isolatingRunIndices[0];
@@ -79,19 +69,19 @@ class IsolatingRunSequence {
 
         int higherEmbeddingLevel;
         if (runStartIndex == 0) {
-            higherEmbeddingLevel = (int)Math.Max(paragraphEmbeddingLevel, embeddingLevels[runStartIndex]);
+            higherEmbeddingLevel = (int)Math.Max(bidiData.paragraphEmbeddingLevel, bidiData.embeddingLevels[runStartIndex]);
         } else {
-            higherEmbeddingLevel = (int)Math.Max(embeddingLevels[runStartIndex], embeddingLevels[runStartIndex - 1]);
+            higherEmbeddingLevel = (int)Math.Max(bidiData.embeddingLevels[runStartIndex], bidiData.embeddingLevels[runStartIndex - 1]);
         }
 
         startOfSequene = higherEmbeddingLevel % 2 == 0 ? BidiClass.L : BidiClass.R;
 
         // BD13 explicitly mentions that if an isolating run sequence ends with an isolate initiator then that isolate
         // initiator must not have a matching PDI. The behaviour regarding the final character is written in X10. 
-        if (runEndIndex == embeddingLevels.Length - 1 || bidiClasses[runEndIndex].IsIsolateInitiator()) {
-            higherEmbeddingLevel = (int)Math.Max(paragraphEmbeddingLevel, embeddingLevels[runEndIndex]);
+        if (runEndIndex == bidiData.embeddingLevels.Length - 1 || bidiData.bidiClasses[runEndIndex].IsIsolateInitiator()) {
+            higherEmbeddingLevel = (int)Math.Max(bidiData.paragraphEmbeddingLevel, bidiData.embeddingLevels[runEndIndex]);
         } else {
-            higherEmbeddingLevel = (int)Math.Max(embeddingLevels[runEndIndex], embeddingLevels[runEndIndex + 1]);
+            higherEmbeddingLevel = (int)Math.Max(bidiData.embeddingLevels[runEndIndex], bidiData.embeddingLevels[runEndIndex + 1]);
         }
 
         endOfSequence = higherEmbeddingLevel % 2 == 0 ? BidiClass.L : BidiClass.R;
@@ -566,7 +556,7 @@ public static class NetBidi
                     }
                 }
 
-                isolationRunSequences.Add(new IsolatingRunSequence(bidiData.embeddingLevels, bidiData.bidiClasses, currentIsolationRun, bidiData.paragraphEmbeddingLevel));
+                isolationRunSequences.Add(new IsolatingRunSequence(bidiData, currentIsolationRun));
             }
         }
 
@@ -931,7 +921,7 @@ public static class NetBidi
             }
         }
 
-        return System.Text.Encoding.UTF32.GetString(resultBytes.ToArray());
+        return Encoding.UTF32.GetString(resultBytes.ToArray());
     }
 
     // In accordance with BD9.
