@@ -478,8 +478,9 @@ public static class NetBidi
                 currentLevelRunStartIndex = currentIndex;
                 currentLevelRunEmbeddingLevel = currentEmbeddingLevel;
             }
-            // Handle the last character of the string in a level run. TODO: Got a bug here in which the last index is not counted.
-            else if (currentIndex == bidiData.logicalString.Length -1) {
+
+            // Handle the last character of the string in a level run.
+            if (currentIndex == bidiData.logicalString.Length -1) {
                 levelRuns.Add(new ArraySegment<uint>(bidiData.logicalString, currentLevelRunStartIndex, currentIndex - currentLevelRunStartIndex + 1));
             }
         }
@@ -644,7 +645,7 @@ public static class NetBidi
     static void ResolveW6(IsolatingRunSequence isolatingRunSequence, BidiClass[] bidiClasses) {
         foreach (int absoluteCharIndex in isolatingRunSequence.isolatingRunIndices) {
             if (bidiClasses[absoluteCharIndex].IsSeparator() || bidiClasses[absoluteCharIndex] == BidiClass.ET) {
-                bidiClasses[absoluteCharIndex] = BidiClass.R;
+                bidiClasses[absoluteCharIndex] = BidiClass.ON;
             }
         }
     }
