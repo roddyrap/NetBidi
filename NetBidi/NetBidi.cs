@@ -1,6 +1,7 @@
 ﻿using System.Runtime.CompilerServices;
 using System.ComponentModel;
 using System.Text;
+using System.Diagnostics;
 
 using BidiReturnData = (uint[] visualString, uint[] embeddingLevels);
 
@@ -164,12 +165,12 @@ public static class NetBidi
             _ => throw new InvalidOperationException()
         };
 
-        Console.WriteLine($"Paragraph embedding level: {paragraphEmbeddingLevel}");
+        Debug.WriteLine($"Paragraph embedding level: {paragraphEmbeddingLevel}");
 
         BidiStringData bidiData = ResolveExplicit(logicalString, paragraphEmbeddingLevel);
 
-        Console.WriteLine($"Isolating runs class values: {string.Join(", ", bidiData.bidiClasses)}");
-        Console.WriteLine($"Isolating runs embedding values: {string.Join(", ", bidiData.embeddingLevels)}");
+        Debug.WriteLine($"Isolating runs class values: {string.Join(", ", bidiData.bidiClasses)}");
+        Debug.WriteLine($"Isolating runs embedding values: {string.Join(", ", bidiData.embeddingLevels)}");
 
         // If there are only explicit characters in the logical string, X9 might strip all of them and have an
         // empty string. There's no point in reordering empty strings.
@@ -180,7 +181,7 @@ public static class NetBidi
         // A part of X10.
         ResolveWX(isolatingRuns, bidiData);
 
-        Console.WriteLine($"Intermediate class values: {string.Join(", ", bidiData.bidiClasses)}");
+        Debug.WriteLine($"Intermediate class values: {string.Join(", ", bidiData.bidiClasses)}");
 
         // A part of X10.
         ResolveNX(isolatingRuns, bidiData);
@@ -253,9 +254,9 @@ public static class NetBidi
             }
         }
 
-        Console.WriteLine($"Input: {string.Join(", ", bidiData.logicalString.Select(x => x.ToString("X4")))}");
-        Console.WriteLine($"Output: {string.Join(", ", newString.Select(x => x.ToString("X4")))}");
-        Console.WriteLine($"Embedding Values: {string.Join(", ", bidiData.embeddingLevels)}");
+        Debug.WriteLine($"Input: {string.Join(", ", bidiData.logicalString.Select(x => x.ToString("X4")))}");
+        Debug.WriteLine($"Output: {string.Join(", ", newString.Select(x => x.ToString("X4")))}");
+        Debug.WriteLine($"Embedding Values: {string.Join(", ", bidiData.embeddingLevels)}");
         return newString;
     }
 
@@ -328,8 +329,8 @@ public static class NetBidi
             // N0 mentions that the bracket pairs need to be processed sequentially by the order of the opening paired brackets.
             bracketPairs.Sort((first_pair, second_pair) => first_pair.Item1.CompareTo(second_pair.Item1));
 
-            Console.WriteLine($"Bracket pairs: {string.Join(", ", bracketPairs)}");
-            Console.WriteLine($"Isolating run {isolatingRunSequence.isolatingRunIndices.First()} - {isolatingRunSequence.isolatingRunIndices.Last()}; EL: {isolatingRunSequence.embdeddingLevel}");
+            Debug.WriteLine($"Bracket pairs: {string.Join(", ", bracketPairs)}");
+            Debug.WriteLine($"Isolating run {isolatingRunSequence.isolatingRunIndices.First()} - {isolatingRunSequence.isolatingRunIndices.Last()}; EL: {isolatingRunSequence.embdeddingLevel}");
 
             foreach ((int, int) bracketIndices in bracketPairs) {
                 // I need to know if the matching strong has been found, not just the first strong one found.
@@ -394,8 +395,8 @@ public static class NetBidi
                 }
             }
 
-            Console.WriteLine($"After N0 class values: {string.Join(", ", bidiData.bidiClasses)}");
-            Console.WriteLine($"Isolating run start/end: {isolatingRunSequence.startOfSequene}/{isolatingRunSequence.endOfSequence}");
+            Debug.WriteLine($"After N0 class values: {string.Join(", ", bidiData.bidiClasses)}");
+            Debug.WriteLine($"Isolating run start/end: {isolatingRunSequence.startOfSequene}/{isolatingRunSequence.endOfSequence}");
 
             // Rule N1. TODO: This is an extremely bad implementation that I MUST change in the future.
             BidiClass startBidiClass = NXResolveStrongBidiClass(isolatingRunSequence.startOfSequene);
@@ -433,7 +434,7 @@ public static class NetBidi
                 }
             }
 
-            Console.WriteLine($"After N1 class values: {string.Join(", ", bidiData.bidiClasses)}");
+            Debug.WriteLine($"After N1 class values: {string.Join(", ", bidiData.bidiClasses)}");
 
             // Rule N2.
             foreach (int absoluteCharIndex in isolatingRunSequence.isolatingRunIndices) {
@@ -442,8 +443,8 @@ public static class NetBidi
                 }
             }
 
-            Console.WriteLine($"After N2 class values: {string.Join(", ", bidiData.bidiClasses)}");
-            Console.WriteLine($"After N2 embedding values: {string.Join(", ", bidiData.embeddingLevels)}");
+            Debug.WriteLine($"After N2 class values: {string.Join(", ", bidiData.bidiClasses)}");
+            Debug.WriteLine($"After N2 embedding values: {string.Join(", ", bidiData.embeddingLevels)}");
 
             // Rules I1 & I2.
             // Important: From now on we can't use the isolating run sequence's embedding value, because it may not represent all characters inside of it.
@@ -467,8 +468,8 @@ public static class NetBidi
                 }
             }
 
-            Console.WriteLine($"After I1/2 class values: {string.Join(", ", bidiData.bidiClasses)}");
-            Console.WriteLine($"After I1/2 embedding values: {string.Join(", ", bidiData.embeddingLevels)}");
+            Debug.WriteLine($"After I1/2 class values: {string.Join(", ", bidiData.bidiClasses)}");
+            Debug.WriteLine($"After I1/2 embedding values: {string.Join(", ", bidiData.embeddingLevels)}");
         }
     }
 
@@ -510,9 +511,9 @@ public static class NetBidi
     static List<IsolatingRunSequence> GetIsolatingRunSequences(BidiStringData bidiData) {
         List<ArraySegment<uint>> levelRuns = GetLevelRuns(bidiData);
 
-        Console.WriteLine("Level Runs:");
+        Debug.WriteLine("Level Runs:");
         foreach (ArraySegment<uint> levelRun in levelRuns) {
-            Console.WriteLine($"{levelRun.Offset} - {levelRun.Count + levelRun.Offset - 1}");
+            Debug.WriteLine($"{levelRun.Offset} - {levelRun.Count + levelRun.Offset - 1}");
         }
 
         // TODO: Finding PDI vailidity is dumb and really wasteful because I am doing it in the explicit resolve already.
@@ -529,7 +530,7 @@ public static class NetBidi
                 int absoluteCharIndex = levelRuns[currentLevelRunIndex].Offset + currentCharIndex;
 
                 int matchingPdiIndex = GetMatchingPDIIndex(bidiData.logicalString, absoluteCharIndex);
-                Console.WriteLine($"Level Run char index: {absoluteCharIndex} {bidiData.bidiClasses[absoluteCharIndex]} {matchingPdiIndex} {currentLevelRunIndex}/{currentCharIndex}");
+                Debug.WriteLine($"Level Run char index: {absoluteCharIndex} {bidiData.bidiClasses[absoluteCharIndex]} {matchingPdiIndex} {currentLevelRunIndex}/{currentCharIndex}");
 
                 // Dumb way to add valid PDIs. The current bidi char check happens inside the method, so I don't need to do it here.
                 // TODO: Replace PDI recognition because it's dumb.
@@ -544,8 +545,8 @@ public static class NetBidi
             }
         }
 
-        Console.WriteLine($"Isolate Initiators to PDI: {string.Join(", ", isolateInitiatorToPDI)}");
-        Console.WriteLine($"PDI Level runs: {string.Join(", ", pdiLevelRuns)}");
+        Debug.WriteLine($"Isolate Initiators to PDI: {string.Join(", ", isolateInitiatorToPDI)}");
+        Debug.WriteLine($"PDI Level runs: {string.Join(", ", pdiLevelRuns)}");
 
         List<IsolatingRunSequence> isolationRunSequences = new();
 
@@ -569,7 +570,7 @@ public static class NetBidi
             }
         }
 
-        Console.WriteLine($"Number of isolating run sequences: {isolationRunSequences.Count}");
+        Debug.WriteLine($"Number of isolating run sequences: {isolationRunSequences.Count}");
         return isolationRunSequences;
     }
 
@@ -787,7 +788,7 @@ public static class NetBidi
             BidiClass currentBidiClass = BidiMap.GetBidiClass(currentChar);
             uint newCurrentEmbeddedLevel = uint.MaxValue;
 
-            Console.WriteLine($"{currentIndex} Directional stack status: {directionalStack.Peek().embeddingLevel}, {directionalStack.Peek().directionalOverrideStatus}, {directionalStack.Peek().directionalIsolateStatus}");
+            Debug.WriteLine($"{currentIndex} Directional stack status: {directionalStack.Peek().embeddingLevel}, {directionalStack.Peek().directionalOverrideStatus}, {directionalStack.Peek().directionalIsolateStatus}");
 
             switch (currentBidiClass) {
             // According to X2 - X5.
@@ -819,7 +820,7 @@ public static class NetBidi
                     throw new InvalidEnumArgumentException();
                 }
 
-                Console.WriteLine($"FSI Information: {currentIndex}, {GetMatchingPDIIndex(inString, currentIndex)}, Direction: {currentBidiClass}");
+                Debug.WriteLine($"FSI Information: {currentIndex}, {GetMatchingPDIIndex(inString, currentIndex)}, Direction: {currentBidiClass}");
                 HandleIsolate(ref currentBidiClass, directionalStack, ref overflowIsolateCount, ref overflowEmbeddingCount,
                             ref validIsolateCount, ref newCurrentEmbeddedLevel);
                 break;
