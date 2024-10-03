@@ -164,7 +164,7 @@ public static class UniBidi
                 bidiData.embeddingLevels[absoluteCharIndex] = bidiData.paragraphEmbeddingLevel;
 
                 for (int iteratedCharIndex = absoluteCharIndex - 1; iteratedCharIndex >= 0; --iteratedCharIndex) {
-                    BidiClass iteratedBidiClassValue = bidiData.bidiClasses[iteratedCharIndex];
+                    BidiClass iteratedBidiClassValue = BidiMap.GetBidiClass(bidiData.logicalString[iteratedCharIndex]);
                     if (iteratedBidiClassValue == BidiClass.WS || iteratedBidiClassValue.IsIsolateInitiator() || iteratedBidiClassValue == BidiClass.PDI) {
                         bidiData.embeddingLevels[iteratedCharIndex] = bidiData.paragraphEmbeddingLevel;
                     } else {
@@ -176,7 +176,7 @@ public static class UniBidi
 
         // L1 section 4.
         for (int absoluteCharIndex = bidiData.logicalString.Length - 1; absoluteCharIndex >= 0; --absoluteCharIndex) {
-            BidiClass iteratedBidiClassValue = bidiData.bidiClasses[absoluteCharIndex];
+            BidiClass iteratedBidiClassValue = BidiMap.GetBidiClass(bidiData.logicalString[absoluteCharIndex]);
             if (iteratedBidiClassValue == BidiClass.WS || iteratedBidiClassValue.IsIsolateInitiator() || iteratedBidiClassValue == BidiClass.PDI) {
                 bidiData.embeddingLevels[absoluteCharIndex] = bidiData.paragraphEmbeddingLevel;
             } else {
@@ -594,13 +594,13 @@ public static class UniBidi
             int absoluteCharIndex = isolatingRunSequence.isolatingRunIndices[currentCharIndex];
             if (bidiClasses[absoluteCharIndex] != BidiClass.EN) continue;
 
-            for (int iteratedCharIndex = currentCharIndex; iteratedCharIndex >= 0; --iteratedCharIndex) {
+            for (int iteratedCharIndex = currentCharIndex - 1; iteratedCharIndex >= 0; --iteratedCharIndex) {
                 int absoluteIteratedCharIndex = isolatingRunSequence.isolatingRunIndices[iteratedCharIndex];
                 if (bidiClasses[absoluteIteratedCharIndex] == BidiClass.ET) {
                     bidiClasses[absoluteIteratedCharIndex] = BidiClass.EN;
                 } else break;
             }
-            for (int iteratedCharIndex = currentCharIndex; iteratedCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++iteratedCharIndex) {
+            for (int iteratedCharIndex = currentCharIndex + 1; iteratedCharIndex < isolatingRunSequence.isolatingRunIndices.Count; ++iteratedCharIndex) {
                 int absoluteIteratedCharIndex = isolatingRunSequence.isolatingRunIndices[iteratedCharIndex];
                 if (bidiClasses[absoluteIteratedCharIndex] == BidiClass.ET) {
                     bidiClasses[absoluteIteratedCharIndex] = BidiClass.EN;
@@ -753,9 +753,12 @@ public static class UniBidi
                 break;
             // According to X5c.
             case BidiClass.FSI:
-                // TODO: Handle the case in which the FSI is invalid (GetMatchingPDIIndex is MaxValue).
+                // If there is no matching PDI use the span until the end of the string.
+                int matchingPDIIndex = GetMatchingPDIIndex(inString, currentIndex);
                 Console.WriteLine($"FSI Information: {currentIndex}, {GetMatchingPDIIndex(inString, currentIndex)}");
-                Span<uint> isolatedStringSpan = inString.Slice(currentIndex, GetMatchingPDIIndex(inString, currentIndex) - currentIndex + 1);
+                matchingPDIIndex = matchingPDIIndex == int.MaxValue ? inString.Length - 1 : matchingPDIIndex;
+
+                Span<uint> isolatedStringSpan = inString.Slice(currentIndex, matchingPDIIndex - currentIndex + 1);
                 uint nextEmbeddingLevel = GetParagraphEmbeddingLevel(isolatedStringSpan);
                 if (nextEmbeddingLevel == RTL_DEFAULT_EMBEDDING_LEVEL) {
                     currentBidiClass = BidiClass.RLI;
@@ -915,7 +918,7 @@ public static class UniBidi
         while (scopeCounter > 0 && currentIndex < logicalString.Length - 1) {
             BidiClass currentBidiType = BidiMap.GetBidiClass(logicalString[currentIndex]);
 
-            // TODO: Handle PDI characters that close an isolate initiator before the embedding initiator, 
+            // TODO: Handle PDI characters that close an isolate initiator before the embedding initiator,
             // TODO: in accordance with BD11. Should stop the search.
             if (currentBidiType == BidiClass.PDF) scopeCounter -= 1;
             if (currentBidiType.IsEmbeddingInitiator()) scopeCounter += 1;
