@@ -1,6 +1,6 @@
 # NetiBidi - An implementation of the Unicode Bi-Directional algorithm for the .net runtime
 
-![NetBidi Icon](banner.svg)
+![NetBidi Icon](images/banner.svg)
 
 > [!IMPORTANT]
 > This project is not affiliated with Unicode, Microsoft, or the .net runtime in any way.

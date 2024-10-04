@@ -5,7 +5,20 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GeneratedDir>$(ProjectDir)Generated\</GeneratedDir>
+
+    <PackageId>RoddyRap.NetBidi</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Roddy Rappaport</Authors>
+    <PackageIcon>icon.png</PackageIcon>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageTags>unicode;bidi;rtl;ltr</PackageTags>
+    <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
   </PropertyGroup>
+
+  <ItemGroup>
+      <None Include="..\images\png\icon.png" Pack="true" PackagePath="\"/>
+      <None Include="..\README.md" Pack="true" PackagePath="\"/>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Mono.TextTemplating" Version="2.3.1" />
