@@ -1,0 +1,44 @@
+name: Publish .NET Core Nuget packages
+
+on:
+  release:
+    types: [published]
+
+  workflow_dispatch:
+
+jobs:
+
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # Install the .NET Core workload
+    - name: Install .NET Core
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Install .NET workspace tools
+      run: dotnet tool restore
+
+    # Execute all unit tests in the solution
+    - name: Execute unit tests
+      run: dotnet test
+
+    - name: Pack the relevant projects
+      run: dotnet pack -o NugetPackages/
+
+    - name: Upload Nuget files to GitHub Packages
+      run: dotnet nuget push NugetPackages/ --skip-duplicate --api-key "${{secrets.NUGET_GITHUB_TOKEN}}" --source "https://nuget.pkg.github.com/${{github.repository_owner}}"
+
+    # Upload the Nuget packages: https://github.com/marketplace/actions/upload-a-build-artifact
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: NuGet Packages
+        path: NugetPackages/
