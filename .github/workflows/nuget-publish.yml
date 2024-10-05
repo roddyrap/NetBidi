@@ -1,21 +1,37 @@
 name: Publish .NET Core Nuget packages
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v?[0-9]+\.[0-9]+\.[0-9]+'
 
   workflow_dispatch:
 
 jobs:
-
-  build:
+  build_test_publish:
+    # While I use Linux I think using Windows, due to its ties with Microsoft, is better.
     runs-on: windows-latest
+
+    permissions:
+      contents: write
+
+    env:
+      NUGET_ARTIFACTS_DIR: NugetPackages
+      VERSION_MATCH_REGEX: 'v?([0-9]+\.[0-9]+\.[0-9])'
 
     steps:
     - name: Checkout
       uses: actions/checkout@v4
       with:
         fetch-depth: 0
+
+    # I want to manipulate the version name, so I can't directly set it in the env section.
+    - name: Verify version tag
+      run: >-
+        "${{github.ref_name}}" -match "^${{env.VERSION_MATCH_REGEX}}$$"
+    - name: Setup version name
+      run: >-
+        echo "VERSION_NAME=$("${{github.ref_name}}" -replace "${{env.VERSION_MATCH_REGEX}}", '$1')" | Out-File -FilePath "${{github.env}}" -Append
 
     # Install the .NET Core workload
     - name: Install .NET Core
@@ -31,14 +47,25 @@ jobs:
       run: dotnet test
 
     - name: Pack the relevant projects
-      run: dotnet pack -o NugetPackages/
+      run: dotnet pack "-property:Version=${{env.VERSION_NAME}}" -o "${{env.NUGET_ARTIFACTS_DIR}}/"
 
     - name: Upload Nuget files to GitHub Packages
-      run: dotnet nuget push NugetPackages/ --skip-duplicate --api-key "${{secrets.NUGET_GITHUB_TOKEN}}" --source "https://nuget.pkg.github.com/${{github.repository_owner}}"
+      run: dotnet nuget push "${{env.NUGET_ARTIFACTS_DIR}}/" --api-key "${{secrets.NUGET_GITHUB_TOKEN}}" --source "https://nuget.pkg.github.com/${{github.repository_owner}}"
+
+    # Create the GitHub release.
+    - name: Release on GitHub.
+      uses: softprops/action-gh-release@v2
+      with:
+        name: "Version ${{env.VERSION_NAME}}"
+        generate_release_notes: true
+        files: "${{env.NUGET_ARTIFACTS_DIR}}/*"
+        make_latest: true
 
     # Upload the Nuget packages: https://github.com/marketplace/actions/upload-a-build-artifact
+    # TODO: Upload each file in "${NUGET_ARTIFACTS_DIR}/" as a unique artifact.
     - name: Upload build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
+
       with:
         name: NuGet Packages
-        path: NugetPackages/
+        path: "${{env.NUGET_ARTIFACTS_DIR}}/*"
