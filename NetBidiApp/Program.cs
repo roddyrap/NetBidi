@@ -79,9 +79,9 @@ namespace NetBidiApp
 
             rootCommand.SetHandler((inputFile, outputFile, direction, unicodeEscaping) => 
                 { 
-                    uint[] logicalString = NetBidi.NetBidi.ConvertString(ReadFile(inputFile));
+                    uint[] logicalString = Bidi.ConvertString(ReadFile(inputFile));
 
-                    string visualString = NetBidi.NetBidi.BidiResolveString(logicalString, direction);
+                    string visualString = Bidi.ReorderString(logicalString, direction);
                     visualString = EscapeText(visualString, unicodeEscaping);
 
                     WriteFile(outputFile, visualString); 

@@ -88,7 +88,7 @@ class IsolatingRunSequence {
     }
 }
 
-public static class NetBidi
+public static class Bidi
 {
     // According to BD2.
     public const uint MAX_DPETH = 125;
@@ -100,12 +100,12 @@ public static class NetBidi
     const uint LTR_DEFAULT_EMBEDDING_LEVEL = 0;
     const uint RTL_DEFAULT_EMBEDDING_LEVEL = 1;
 
-    public static string BidiResolveString(string logicalString) {
-        return BidiResolveString(ConvertString(logicalString));
+    public static string ReorderString(string logicalString) {
+        return ReorderString(ConvertString(logicalString));
     }
 
-    public static string BidiResolveString(uint[] logicalString, TextDirection givenParagraphEmbedding = TextDirection.NEUTRAL, bool mirrorCharacters = true) {
-        return ConvertUInts(BidiResolveStringEx(logicalString, givenParagraphEmbedding, mirrorCharacters).visualString);
+    public static string ReorderString(uint[] logicalString, TextDirection givenParagraphEmbedding = TextDirection.NEUTRAL, bool mirrorCharacters = true) {
+        return ConvertUInts(ReorderStringEx(logicalString, givenParagraphEmbedding, mirrorCharacters).visualString);
     }
 
     // TODO: This method currenly copies the enumerable, which is rather wasteful.
@@ -126,7 +126,7 @@ public static class NetBidi
         }
     }
 
-    public static BidiReturnData BidiResolveStringEx(uint[] logicalString, TextDirection givenParagraphEmbedding = TextDirection.NEUTRAL, bool mirrorCharacters = true) {
+    public static BidiReturnData ReorderStringEx(uint[] logicalString, TextDirection givenParagraphEmbedding = TextDirection.NEUTRAL, bool mirrorCharacters = true) {
         // TODO: Move paragraph seprator constant to a normal place.
         const uint PARAGRAPH_SEPARATOR_CODEPOINT = 0x2029;
     
@@ -964,8 +964,8 @@ public static class NetBidi
             // TODO: Handle PDI characters that close an isolate initiator before the embedding initiator,
             // TODO: in accordance with BD11. Should stop the search.
             if (currentBidiType == BidiClass.PDF) scopeCounter -= 1;
-            if (currentBidiType.IsEmbeddingInitiator()) scopeCounter += 1;
-            if (currentBidiType.IsIsolateInitiator()) {
+            else if (currentBidiType.IsEmbeddingInitiator()) scopeCounter += 1;
+            else if (currentBidiType.IsIsolateInitiator()) {
                 currentIndex = GetMatchingPDFIndex(logicalString, currentIndex);
             }
             else {
