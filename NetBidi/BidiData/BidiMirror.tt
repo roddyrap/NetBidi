@@ -8,27 +8,26 @@
 string mirroringFileString = GetWebFile("https://www.unicode.org/Public/UCD/latest/ucd/BidiBrackets.txt");
 
 // process the unicode data.
-List<(UInt32, UInt32)> mirrorPairs = new();
-foreach (string line in mirroringFileString.Split('\n')) {
-    if (line.StartsWith('#')) continue;
+IEnumerable<(UInt32, UInt32)> ParseMirrorsFile(string fileString) {
+    foreach (string line in mirroringFileString.Split('\n')) {
+        if (line.StartsWith('#')) continue;
 
-    string[] splitLine = line.Split(";");
-    if (splitLine.Length < 2) continue;
+        string[] splitLine = line.Split(";");
+        if (splitLine.Length < 2) continue;
 
-    mirrorPairs.Add(
-        (
+        yield return (
             Convert.ToUInt32(splitLine[0].Trim(), 16),
             Convert.ToUInt32(splitLine[1].Trim(), 16)
-        )
-    );
+        );
+    }
 }
 #>
 namespace NetBidi;
 
-static partial class BidiMap {
+public static partial class BidiMap {
     public static UInt32 GetMirror(UInt32 bidiChar) {
         return bidiChar switch {
-<# foreach ((UInt32 bidiChar, UInt32 mirrorChar) in mirrorPairs) {#>
+<# foreach ((UInt32 bidiChar, UInt32 mirrorChar) in ParseMirrorsFile(mirroringFileString)) {#>
             <#= bidiChar #> => <#= mirrorChar #>,
 <# } #>
             _ => bidiChar
