@@ -2,23 +2,22 @@
 <#@ output extension=".cs" #>
 <#@ assembly name="System.Collections" #>
 <#@ import namespace="System.Collections.Generic" #>
+<#@ import namespace = "System.Linq"#>
 <#@ include file="BidiData/BidiInfra.ttinclude" #>
 <#=AutoGenerateComment()#>
 <#
 string bracketsFileString = GetWebFile("https://www.unicode.org/Public/UCD/latest/ucd/BidiBrackets.txt");
 
-// process the unicode data.
-List<(UInt32, UInt32, string)> bracketData = new();
-foreach (string line in bracketsFileString.Split('\n')) {
-    if (line.StartsWith('#')) continue;
+IEnumerable<(UInt32, UInt32, string)> ParseBidiBrackets(string fileString) {
+    foreach (string line in bracketsFileString.Split('\n')) {
+        if (line.StartsWith('#')) continue;
 
-    var noCommentLine = line.Split("#")[0];
-    string[] splitLine = noCommentLine.Split(";");
+        var noCommentLine = line.Split("#")[0];
+        string[] splitLine = noCommentLine.Split(";");
 
-    if (splitLine.Length < 3) continue;
+        if (splitLine.Length < 3) continue;
 
-    bracketData.Add(
-        (
+        yield return (
             Convert.ToUInt32(splitLine[0].Trim(), 16),
             Convert.ToUInt32(splitLine[1].Trim(), 16),
             splitLine[2].Trim() switch {
@@ -26,13 +25,16 @@ foreach (string line in bracketsFileString.Split('\n')) {
                 "c" => "CLOSE",
                 _ => throw new System.ComponentModel.InvalidEnumArgumentException()
             }
-        )
-    );
+        );
+    }
 }
+
+// process the unicode data. TODO: Can't use as enumerablle because it's used twice.
+List<(UInt32, UInt32, string)> bracketData = ParseBidiBrackets(bracketsFileString).ToList();
 #>
 namespace NetBidi;
 
-static partial class BidiMap {
+public static partial class BidiMap {
     public static uint GetPairedBracket(UInt32 bidiChar) {
         return bidiChar switch {
 <# foreach ((UInt32 bidiChar, UInt32 pairedBracket, string _) in bracketData) {#>
