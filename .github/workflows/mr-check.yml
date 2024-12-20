@@ -1,0 +1,30 @@
+name: Build Project and Ensure Unit Test Pass 
+
+on:
+  pull_request:
+    branches:
+        - '*'
+
+jobs:
+  build_test:
+    # While I use Linux I think using Windows, due to its ties with Microsoft, is better.
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    # Install the .NET Core workload
+    - name: Install .NET Core
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 8.0.x
+
+    - name: Install .NET workspace tools
+      run: dotnet tool restore
+
+    # Execute all unit tests in the solution
+    - name: Execute unit tests
+      run: dotnet test
