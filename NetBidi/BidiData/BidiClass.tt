@@ -17,50 +17,139 @@ if (!versionMatch.Success) {
 
 string unicodeVersion = versionMatch.Value;
 
-// process the unicode data.
-List<(UInt32, string)> bidiClasss = new();
-foreach (string line in bidiClasssFileString.Split('\n')) {
-    if (line.StartsWith('#')) continue;
+(UInt32 startIndex, UInt32 stopIndex, string bidiClass)? ParseBidiClassLine(string line) {
+    if (line.StartsWith('#')) return null;
 
     var noCommentLine = line.Split("#")[0];
 
     var splitLine = noCommentLine.Split(';');
-    if (splitLine.Length < 2) continue;
-
-
-    UInt32 startIndex, stopIndex;
-    if (splitLine[0].Contains('.')) {
-        var indices = splitLine[0].Split('.');
-
-        startIndex = Convert.ToUInt32(indices[0].Trim(), 16);
-        stopIndex = Convert.ToUInt32(indices[2].Trim(), 16);
-    } else {
-        startIndex = Convert.ToUInt32(splitLine[0].Trim(), 16);
-        stopIndex = startIndex;
-    }
+    if (splitLine.Length < 2) return null;
 
     string bidiClassString = splitLine[1].Trim();
 
-    // The default bidi type of a character is "L". Becuase of that, if there's no mapping, a character's type
-    // is assumed to be "L", so we don't need to create the mappings. This helps to save some mappings which
-    // makes generation and compilation faster.
-    if (bidiClassString == "L") continue;
+    if (splitLine[0].Contains('.')) {
+        var indices = splitLine[0].Split('.');
 
-    // TODO: C# 7/9 have added range matching capabalities to switches, so I should use them.
-    for (UInt32 currentIndex = startIndex; currentIndex <= stopIndex; ++currentIndex) {
-        bidiClasss.Add((currentIndex, bidiClassString));
+        UInt32 startIndex = Convert.ToUInt32(indices[0].Trim(), 16);
+        UInt32 stopIndex = Convert.ToUInt32(indices[2].Trim(), 16);
+
+        return (startIndex, stopIndex, bidiClassString);
+    } else {
+        UInt32 startIndex = Convert.ToUInt32(splitLine[0].Trim(), 16);
+
+        return (startIndex, startIndex, bidiClassString);
     }
+}
+
+
+/// <summary>
+/// Convert <parameref name="startIndex"/> and <parameref name="stopIndex"/> to the optimal
+/// constant/relative switch expression that will match them.
+/// </summary>
+/// <param name="fileString">A string containing the contents of a Unicode DerviedBidiClass.txt file.</param>
+/// <returns>
+/// Return a constant switch expression if <parameref name="startIndex"/> is equal to <parameref name="stopIndex"/> 
+/// that will match the number they are equal to.
+/// If <parameref name="startIndex"/> is not equal to <parameref name="stopIndex"/>, return
+/// a relative expression that will match [startIndex, endIndex].
+/// </returns>
+string ConstructComparisonString(UInt32 startIndex, UInt32 stopIndex) {
+    if (startIndex == stopIndex) return startIndex.ToString();
+    return $">= {startIndex} and <= {stopIndex}";
+}
+
+/// <summary>
+/// Parse <paramref name="fileString"/> to arms (condition, value) of a switch statement.
+/// 
+/// It guarentees an optimal number of arms by passing over the entire file and sorting the code-points for each
+/// Unicode BidiClass.
+/// </summary>
+/// <param name="fileString">A string containing the contents of a Unicode DerviedBidiClass.txt file.</param>
+/// <returns>
+/// A list that contains a tuple with the condition that should be put in the string to, and the name of the BidiClass it should return.
+/// The condition is always a constant switch expression or a relative switch expression.
+/// </returns>
+List<(string, string)> ParseBidiClassFile(string fileString) {
+    // Iterate over each line in the file and add its indices to the corresponding BidiClass in bidiIndices.
+    Dictionary<string, List<UInt32>> bidiIndices = new();
+    foreach (string line in fileString.Split('\n')) {
+        // Only consider lines that have been matched correctly, and aren't of BidiClass 'L' as 'L' is the default
+        // and therefore doesn't require to be explicitly matched.
+        (UInt32 startIndex, UInt32 stopIndex, string bidiClass)? nullableLineParse = ParseBidiClassLine(line);
+        if (!nullableLineParse.HasValue || nullableLineParse?.bidiClass == "L")
+        {
+            continue;
+        }
+
+        // If this is the first time a BidiClass is encountered the dictionary will not know of it, so a new list
+        // is created. If not, simply add the indices to the list of the BidiClass.
+        (UInt32 startIndex, UInt32 stopIndex, string bidiClass) lineParse = nullableLineParse.Value;
+        if (!bidiIndices.ContainsKey(lineParse.bidiClass)) {
+            bidiIndices[lineParse.bidiClass] = new();
+        }
+        List<UInt32> bidiList = bidiIndices[lineParse.bidiClass];
+        for (UInt32 i = lineParse.startIndex; i <= lineParse.stopIndex; ++i) {
+            bidiList.Add(i);
+        }
+    }
+
+    // Take the indices of each BidiClass in bidiIndices and convert them to switch expressions.
+    List<(string, string)> switchArms = new();
+    foreach (KeyValuePair<string, List<UInt32>> kvp in bidiIndices) {
+        // Sort the list so that even if the file isn't ordered we will always be able to determine
+        // correct ranges by linearly iterating over the indices.
+        List<UInt32> indices = kvp.Value;
+        indices.Sort();
+
+        // Find ranges by iterating over the list's indices until there is a jump in the indices,
+        // in which case a switch expression is generated and the search is restarted.
+        UInt32 startIndex = indices[0];
+        indices.RemoveAt(0);
+
+        UInt32 lastIndex = startIndex;
+        foreach (UInt32 currentIndex in indices) {
+            if (currentIndex == lastIndex + 1)
+            {
+                lastIndex = currentIndex;
+                continue;
+            }
+
+            switchArms.Add((ConstructComparisonString(startIndex, lastIndex), kvp.Key));
+            startIndex = currentIndex;
+            lastIndex = currentIndex;
+        }
+
+        switchArms.Add((ConstructComparisonString(startIndex, lastIndex), kvp.Key));
+    }
+
+    return switchArms;
 }
 #>
 namespace NetBidi;
 
-static partial class BidiMap {
+public static partial class BidiMap {
+    /// <value> The Unicode version that the BidiMap conversion table has been generated from. </value>
     public const string UNICODE_VERSION = "<#= unicodeVersion #>";
 
+    /// <summary>
+    /// Maps a Unicode code-point (<paramref name="bidiChar"/>) to the corresponding BidiClass.
+    /// </summary>
+    /// <param name="bidiChar">The Unicode code-point of the character that is checked</param>
+    /// <returns>
+    /// The BidiClass of <paramref name="bidiChar"/>.
+    /// </returns>
+    /// <example>
+    /// For example:
+    /// <code>
+    /// uint[] convertedLetterA = ConvertString("A");
+    /// BidiClass bidiClassOfA = GetBidiClass(convertedLetterA[0]);
+    /// </code>
+    /// Results in <c>bidiClassOfA</c>'s having the value BidiClass.L.
+    /// </example>
     public static BidiClass GetBidiClass(UInt32 bidiChar) {
         return bidiChar switch {
-<# foreach ((UInt32 bidiChar, string bidiClass) in bidiClasss) {#>
-            <#= bidiChar #> => BidiClass.<#= bidiClass #>,
+<# foreach ((string condition, string bidiClass) in ParseBidiClassFile(bidiClasssFileString)) {#>
+            <#= condition #> => BidiClass.<#= bidiClass #>,
 <# } #>
             _ => BidiClass.L
         };
