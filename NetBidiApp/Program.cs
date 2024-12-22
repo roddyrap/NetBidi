@@ -81,7 +81,8 @@ namespace NetBidiApp
                 { 
                     uint[] logicalString = Bidi.ConvertString(ReadFile(inputFile));
 
-                    string visualString = Bidi.ReorderString(logicalString, direction);
+                    BidiString bidiString = Bidi.CreateBidiString(logicalString, direction);
+                    string visualString = bidiString.GetReorderedString();
                     visualString = EscapeText(visualString, unicodeEscaping);
 
                     WriteFile(outputFile, visualString); 

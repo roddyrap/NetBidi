@@ -30,19 +30,19 @@ public class BidiTests(ITestOutputHelper output)
     [Theory]
     [ClassData(typeof(BidiTestData))]
     [ClassData(typeof(BidiCharacterTestData))]
-    public void TestResolveString(uint[] input, TextDirection paragraphEmbeddingLevel, uint[] expectedEmbeddingLevels, uint[] expectedOutput)
+    public void TestResolveString(uint[] input, TextDirection textDirection, uint[] expectedEmbeddingLevels, uint[] expectedOutput)
     {
         TestTraceWrite traceWriter = new(output);
         Trace.Listeners.Add(traceWriter);
-
         // output.WriteLine($"Test Input: {string.Join(" ", input.Select(x => x.ToString("X4")))}");
         // output.WriteLine($"Expected output: {string.Join(" ", testOutput.Select(x => x.ToString("X4")))}");
 
-        // The unicode test don't support character mirroring.
-        var (visualString, embeddingLevels) = Bidi.ReorderStringEx(input, paragraphEmbeddingLevel, false);
+        BidiString bidiString = Bidi.CreateBidiString(input, textDirection);
 
-        Assert.Equal(expectedEmbeddingLevels, embeddingLevels);
-        Assert.Equal(expectedOutput, visualString);
+        Assert.Equal(expectedEmbeddingLevels, bidiString.GetReolvedEmbeddingLevels());
+
+        // The unicode test don't support character mirroring.
+        Assert.Equal(expectedOutput, bidiString.GetReorderedCodePoints(false));
 
         Trace.Listeners.Remove(traceWriter);
     }
