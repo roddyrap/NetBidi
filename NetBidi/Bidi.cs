@@ -53,11 +53,11 @@ public class BidiString(List<BidiPargraphData> paragraphs) {
     public uint[] GetEmbeddingLevels() {
         return paragraphs.Select(p => p.embeddingLevels).SelectMany(i => i).ToArray();
     }
-    public uint[] GetReolvedEmbeddingLevels() {
+    public uint[] GetResolvedEmbeddingLevels() {
         return CallReorder([GetLogicalCodePoints().Length], false).resolvedLevels;
     }
 
-    public uint[] GetReorderedCodePoints(List<int> linesLengths, bool mirrorCharacters = true) {
+    public uint[] GetReorderedCodePoints(IEnumerable<int> linesLengths, bool mirrorCharacters = true) {
         return CallReorder(linesLengths, mirrorCharacters).visualString;
     }
 
@@ -65,15 +65,15 @@ public class BidiString(List<BidiPargraphData> paragraphs) {
         return CallReorder([GetLogicalCodePoints().Length], mirrorCharacters).visualString;
     }
 
-    public string GetReorderedString(int[] linesLengths, bool mirrorCharacters = true) {
-        return Bidi.ConvertUInts(GetReorderedCodePoints(linesLengths.ToList(), mirrorCharacters));
+    public string GetReorderedString(IEnumerable<int> linesLengths, bool mirrorCharacters = true) {
+        return Bidi.ConvertUInts(GetReorderedCodePoints(linesLengths, mirrorCharacters));
     }
 
     public string GetReorderedString(bool mirrorCharacters = true) {
         return Bidi.ConvertUInts(GetReorderedCodePoints(mirrorCharacters));
     }
 
-    private (uint[] visualString, uint[] resolvedLevels) CallReorder(List<int> linesLengths, bool mirrorCharacters) {
+    private (uint[] visualString, uint[] resolvedLevels) CallReorder(IEnumerable<int> linesLengths, bool mirrorCharacters) {
         // TODO: Implement restructuring from multiple paragraphs.
         if (paragraphs.Count > 1) {
             throw new NotImplementedException();
@@ -186,6 +186,10 @@ public static class Bidi
         if (spanStart < input.Length) {
             yield return new ArraySegment<uint>(input, spanStart, input.Length - spanStart);
         }
+    }
+
+    public static BidiString CreateBidiString(string logicalString, TextDirection textDirection = TextDirection.NEUTRAL) {
+        return CreateBidiString(ConvertString(logicalString), textDirection);
     }
 
     public static BidiString CreateBidiString(uint[] logicalString, TextDirection textDirection = TextDirection.NEUTRAL) {
