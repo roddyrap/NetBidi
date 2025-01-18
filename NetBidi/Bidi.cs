@@ -14,11 +14,7 @@ public enum TextDirection {
 }
 
 // According to the 3.3.2 specification of applying the X rules.
-class DirectionalStatus(uint embeddingLevel, TextDirection directionalOverrideStatus, bool directionalIsolateStatus) {
-    public uint embeddingLevel = embeddingLevel;
-    public TextDirection directionalOverrideStatus = directionalOverrideStatus;
-    public bool directionalIsolateStatus = directionalIsolateStatus;
-}
+record class DirectionalStatus(uint EmbeddingLevel, TextDirection DirectionalOverrideStatus, bool DirectionalIsolateStatus);
 
 // TODO: fields?
 public class BidiPargraphData(uint[] logicalString, uint paragraphEmbeddingLevel, uint[] embeddingLevels, BidiClass[] bidiClasses) {
@@ -774,7 +770,7 @@ public static class Bidi
             return;
         }
 
-        uint newEmbeddingLevel = GetLargerParityThan(directionalStack.Peek().embeddingLevel, isEven);
+        uint newEmbeddingLevel = GetLargerParityThan(directionalStack.Peek().EmbeddingLevel, isEven);
         if (newEmbeddingLevel <= MAX_DPETH && overflowIsolateCount == 0 && overflowEmbeddingCount == 0) {
             directionalStack.Push(new DirectionalStatus(newEmbeddingLevel, newDirectionalOverride, false));
         } else {
@@ -785,7 +781,7 @@ public static class Bidi
     }
 
     static void HandleIsolate(ref BidiClass isolateChar, Stack<DirectionalStatus> directionalStack, ref uint overflowIsolateCount, ref uint overflowEmbeddingCount, ref uint validIsolateCount, ref uint newCurrentEmbeddedLevel) {
-        newCurrentEmbeddedLevel = directionalStack.Peek().embeddingLevel;
+        newCurrentEmbeddedLevel = directionalStack.Peek().EmbeddingLevel;
 
         bool isEven;
         if (isolateChar == BidiClass.RLI) {
@@ -796,14 +792,14 @@ public static class Bidi
             return;
         }
 
-        if (directionalStack.Peek().directionalOverrideStatus == TextDirection.LTR) {
+        if (directionalStack.Peek().DirectionalOverrideStatus == TextDirection.LTR) {
             isolateChar = BidiClass.L;
-        } else if (directionalStack.Peek().directionalOverrideStatus == TextDirection.RTL) {
+        } else if (directionalStack.Peek().DirectionalOverrideStatus == TextDirection.RTL) {
             isolateChar = BidiClass.R;
         }
 
 
-        uint newEmbeddingLevel = GetLargerParityThan(directionalStack.Peek().embeddingLevel, isEven);
+        uint newEmbeddingLevel = GetLargerParityThan(directionalStack.Peek().EmbeddingLevel, isEven);
         if (newEmbeddingLevel <= MAX_DPETH && overflowIsolateCount == 0 && overflowEmbeddingCount == 0) {
             validIsolateCount += 1;
             directionalStack.Push(new DirectionalStatus(newEmbeddingLevel, TextDirection.NEUTRAL, true));
@@ -837,7 +833,7 @@ public static class Bidi
             BidiClass currentBidiClass = BidiMap.GetBidiClass(currentChar);
             uint newCurrentEmbeddedLevel = uint.MaxValue;
 
-            Debug.WriteLine($"{currentIndex} Directional stack status: {directionalStack.Peek().embeddingLevel}, {directionalStack.Peek().directionalOverrideStatus}, {directionalStack.Peek().directionalIsolateStatus}");
+            Debug.WriteLine($"{currentIndex} Directional stack status: {directionalStack.Peek().EmbeddingLevel}, {directionalStack.Peek().DirectionalOverrideStatus}, {directionalStack.Peek().DirectionalIsolateStatus}");
 
             switch (currentBidiClass) {
             // According to X2 - X5.
@@ -880,7 +876,7 @@ public static class Bidi
             case BidiClass.PDF:
                 if (overflowIsolateCount > 0) {}
                 else if (overflowEmbeddingCount > 0) overflowEmbeddingCount -= 1;
-                else if (!directionalStack.Peek().directionalIsolateStatus && directionalStack.Count >= 2) {
+                else if (!directionalStack.Peek().DirectionalIsolateStatus && directionalStack.Count >= 2) {
                     directionalStack.Pop();
                 }
                 break;
@@ -901,7 +897,7 @@ public static class Bidi
                     DirectionalStatus popped;
                     do {
                         popped = directionalStack.Pop();
-                    } while (!popped.directionalIsolateStatus);
+                    } while (!popped.DirectionalIsolateStatus);
                     validIsolateCount -= 1;
                 }
 
@@ -912,9 +908,9 @@ public static class Bidi
                 break;
             // According to X6c.
             default:
-                newCurrentEmbeddedLevel = directionalStack.Peek().embeddingLevel;
+                newCurrentEmbeddedLevel = directionalStack.Peek().EmbeddingLevel;
 
-                TextDirection directionalOverrideStatus = directionalStack.Peek().directionalOverrideStatus;
+                TextDirection directionalOverrideStatus = directionalStack.Peek().DirectionalOverrideStatus;
                 if (directionalOverrideStatus == TextDirection.LTR) {
                     currentBidiClass = BidiClass.L;
                 } else if (directionalOverrideStatus == TextDirection.RTL) {
