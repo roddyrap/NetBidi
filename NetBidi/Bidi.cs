@@ -18,12 +18,12 @@ record class DirectionalStatus(uint EmbeddingLevel, TextDirection DirectionalOve
 
 // TODO: fields?
 public class BidiPargraphData(uint[] logicalString, uint paragraphEmbeddingLevel, uint[] embeddingLevels, BidiClass[] bidiClasses) {
-    public uint[] logicalString = logicalString;
+    public readonly uint[] logicalString = logicalString;
 
-    public uint paragraphEmbeddingLevel = paragraphEmbeddingLevel;
+    public readonly uint paragraphEmbeddingLevel = paragraphEmbeddingLevel;
 
-    public uint[] embeddingLevels = embeddingLevels;
-    public BidiClass[] bidiClasses = bidiClasses;
+    public readonly uint[] embeddingLevels = embeddingLevels;
+    public readonly BidiClass[] bidiClasses = bidiClasses;
 
     public long Length {
         get {
@@ -37,7 +37,7 @@ public class BidiPargraphData(uint[] logicalString, uint paragraphEmbeddingLevel
 }
 
 public class BidiString(List<BidiPargraphData> paragraphs) {
-    readonly List<BidiPargraphData> paragraphs = paragraphs;
+    private readonly List<BidiPargraphData> paragraphs = paragraphs;
 
     // TODO: Cache some of the methods here. They don't need to be calculated more than once.
 
@@ -110,13 +110,13 @@ public class BidiString(List<BidiPargraphData> paragraphs) {
 }
 
 class IsolatingRunSequence {
-    public List<int> isolatingRunIndices;
-    public BidiClass startOfSequene;
-    public BidiClass endOfSequence;
+    public readonly List<int> isolatingRunIndices;
+    public readonly BidiClass startOfSequene;
+    public readonly BidiClass endOfSequence;
 
     // BD13 explicitly mentions that all level runs in an isolating run sequences have the same embedding level, so
     // there's no reason not tconst o expose it to the user.
-    public uint embdeddingLevel;
+    public readonly uint embdeddingLevel;
 
     public int GetRelativeIndex(int wantedAbsoluteIndex) {
         return this.isolatingRunIndices.FindIndex(absoluteIndex => absoluteIndex == wantedAbsoluteIndex);
