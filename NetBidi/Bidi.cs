@@ -20,7 +20,7 @@ class DirectionalStatus(uint embeddingLevel, TextDirection directionalOverrideSt
     public bool directionalIsolateStatus = directionalIsolateStatus;
 }
 
-// TODO: Readonly fields?
+// TODO: fields?
 public class BidiPargraphData(uint[] logicalString, uint paragraphEmbeddingLevel, uint[] embeddingLevels, BidiClass[] bidiClasses) {
     public uint[] logicalString = logicalString;
 
@@ -28,6 +28,12 @@ public class BidiPargraphData(uint[] logicalString, uint paragraphEmbeddingLevel
 
     public uint[] embeddingLevels = embeddingLevels;
     public BidiClass[] bidiClasses = bidiClasses;
+
+    public long Length {
+        get {
+            return logicalString.Length;
+        }
+    }
 
     public BidiClass GetBidiClass(int characterIndex) {
         return BidiMap.GetBidiClass(logicalString[characterIndex]);
@@ -37,39 +43,65 @@ public class BidiPargraphData(uint[] logicalString, uint paragraphEmbeddingLevel
 public class BidiString(List<BidiPargraphData> paragraphs) {
     readonly List<BidiPargraphData> paragraphs = paragraphs;
 
-    // TODO: Cache all of the methods here. They don't need to be calculated more than once.
+    // TODO: Cache some of the methods here. They don't need to be calculated more than once.
 
     // UTF-32.
-    public uint[] GetPlainCodePoints() {
+    public uint[] GetLogicalCodePoints() {
         return paragraphs.Select(p => p.logicalString).SelectMany(i => i).ToArray();
     }
 
-    public string GetPlainString() {
-        return Bidi.ConvertUInts(GetPlainCodePoints());
+    public string GetLogicalString() {
+        return Bidi.ConvertUInts(GetLogicalCodePoints());
     }
 
     public uint[] GetEmbeddingLevels() {
         return paragraphs.Select(p => p.embeddingLevels).SelectMany(i => i).ToArray();
     }
+    public uint[] GetReolvedEmbeddingLevels() {
+        return CallReorder([GetLogicalCodePoints().Length], false).resolvedLevels;
+    }
 
-    private (uint[] visualString, uint[] resolvedLevels) CallReorder(List<uint[]> logicalLines, bool mirrorCharacters) {
+    public uint[] GetReorderedCodePoints(List<int> linesLengths, bool mirrorCharacters = true) {
+        return CallReorder(linesLengths, mirrorCharacters).visualString;
+    }
+
+    public uint[] GetReorderedCodePoints(bool mirrorCharacters = true) {
+        return CallReorder([GetLogicalCodePoints().Length], mirrorCharacters).visualString;
+    }
+
+    public string GetReorderedString(int[] linesLengths, bool mirrorCharacters = true) {
+        return Bidi.ConvertUInts(GetReorderedCodePoints(linesLengths.ToList(), mirrorCharacters));
+    }
+
+    public string GetReorderedString(bool mirrorCharacters = true) {
+        return Bidi.ConvertUInts(GetReorderedCodePoints(mirrorCharacters));
+    }
+
+    private (uint[] visualString, uint[] resolvedLevels) CallReorder(List<int> linesLengths, bool mirrorCharacters) {
         // TODO: Implement restructuring from multiple paragraphs.
         if (paragraphs.Count > 1) {
             throw new NotImplementedException();
         }
 
+        if (paragraphs.Count == 0 || paragraphs[0].logicalString.Length == 0) {
+            return ([], []);
+        }
+
         BidiPargraphData paragraphData = paragraphs[0];
-        if (paragraphData.logicalString.Length == 0) {
+
+        // Make sure that the line lengths match the actual string length, and that every line has value.
+        // TODO: Inefficient - Summing the array and checking all values of it separately.
+        if (!linesLengths.All(x => x > 0) || linesLengths.Sum() != paragraphData.Length) {
             return ([], []);
         }
 
         int lineStartOffset = 0;
         List<uint> orderedLines = new();
         List<uint> resolvedLevels = new();
-        foreach (uint[] lineArray in logicalLines) {
+        foreach (int lineLength in linesLengths) {
             // TODO: Inefficient.
-            uint[] lineEmbeddingLevels = paragraphData.embeddingLevels.AsSpan().Slice(lineStartOffset, lineArray.Length).ToArray();
-            lineStartOffset += lineArray.Length;
+            uint[] lineEmbeddingLevels = paragraphData.embeddingLevels.AsSpan().Slice(lineStartOffset, lineLength).ToArray();
+            lineStartOffset += lineLength;
 
             var resolvedResults = Bidi.ResolveLX(paragraphData, mirrorCharacters);
             orderedLines.AddRange(resolvedResults.visualString);
@@ -79,25 +111,6 @@ public class BidiString(List<BidiPargraphData> paragraphs) {
         return (orderedLines.ToArray(), resolvedLevels.ToArray());
     }
 
-    public uint[] GetReolvedEmbeddingLevels() {
-        return CallReorder([GetPlainCodePoints()], false).resolvedLevels;
-    }
-
-    public uint[] GetReorderedCodePoints(List<uint[]> logicalLines, bool mirrorCharacters = true) {
-        return CallReorder(logicalLines, mirrorCharacters).visualString;
-    }
-
-    public uint[] GetReorderedCodePoints(bool mirrorCharacters = true) {
-        return CallReorder([GetPlainCodePoints()], mirrorCharacters).visualString;
-    }
-
-    public string GetReorderedString(string[] lines, bool mirrorCharacters = true) {
-        return Bidi.ConvertUInts(GetReorderedCodePoints(lines.Select(Bidi.ConvertString).ToList(), mirrorCharacters));
-    }
-
-    public string GetReorderedString(bool mirrorCharacters = true) {
-        return Bidi.ConvertUInts(GetReorderedCodePoints(mirrorCharacters));
-    }
 }
 
 class IsolatingRunSequence {
