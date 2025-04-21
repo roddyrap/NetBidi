@@ -55,7 +55,7 @@ public class BidiTestData : TheoryData<uint[], TextDirection, uint[], uint[]> {
     public BidiTestData() {
         // TODO: I don't want to download the file each run. If I am doing it like this, I should download it at
         // compile-time and read from it at runtime.
-        string bidiTestsString = TestUtils.GetWebFile("https://www.unicode.org/Public/UCD/latest/ucd/BidiTest.txt");
+        string bidiTestsString = TestUtils.GetWebFile(UNICODE_TESTS_URL);
 
         int[] reorderIndices = [];
         uint[] embeddingLevels = [];

@@ -57,7 +57,7 @@ public class BidiString(List<BidiPargraphData> paragraphs) {
         return CallReorder([GetLogicalCodePoints().Length], false).resolvedLevels;
     }
 
-    public uint[] GetReorderedCodePoints(IEnumerable<int> linesLengths, bool mirrorCharacters = true) {
+    public uint[] GetReorderedCodePoints(IReadOnlyList<int> linesLengths, bool mirrorCharacters = true) {
         return CallReorder(linesLengths, mirrorCharacters).visualString;
     }
 
@@ -65,7 +65,7 @@ public class BidiString(List<BidiPargraphData> paragraphs) {
         return CallReorder([GetLogicalCodePoints().Length], mirrorCharacters).visualString;
     }
 
-    public string GetReorderedString(IEnumerable<int> linesLengths, bool mirrorCharacters = true) {
+    public string GetReorderedString(IReadOnlyList<int> linesLengths, bool mirrorCharacters = true) {
         return Bidi.ConvertUInts(GetReorderedCodePoints(linesLengths, mirrorCharacters));
     }
 
@@ -73,35 +73,52 @@ public class BidiString(List<BidiPargraphData> paragraphs) {
         return Bidi.ConvertUInts(GetReorderedCodePoints(mirrorCharacters));
     }
 
-    private (uint[] visualString, uint[] resolvedLevels) CallReorder(IEnumerable<int> linesLengths, bool mirrorCharacters) {
-        // TODO: Implement restructuring from multiple paragraphs.
-        if (paragraphs.Count > 1) {
-            throw new NotImplementedException();
-        }
-
-        if (paragraphs.Count == 0 || paragraphs[0].logicalString.Length == 0) {
+    private (uint[] visualString, uint[] resolvedLevels) CallReorder(IReadOnlyList<int> originalLinesLengths, bool mirrorCharacters) {
+        if (paragraphs.Count == 0) {
             return ([], []);
         }
 
-        BidiPargraphData paragraphData = paragraphs[0];
-
-        // Make sure that the line lengths match the actual string length, and that every line has value.
-        // TODO: Inefficient - Summing the array and checking all values of it separately.
-        if (!linesLengths.All(x => x > 0) || linesLengths.Sum() != paragraphData.Length) {
-            return ([], []);
-        }
-
-        int lineStartOffset = 0;
+        int lineIndex = 0;
         List<uint> orderedLines = new();
         List<uint> resolvedLevels = new();
-        foreach (int lineLength in linesLengths) {
-            // TODO: Inefficient.
-            uint[] lineEmbeddingLevels = paragraphData.embeddingLevels.AsSpan().Slice(lineStartOffset, lineLength).ToArray();
-            lineStartOffset += lineLength;
 
-            var resolvedResults = Bidi.ResolveLX(paragraphData, mirrorCharacters);
-            orderedLines.AddRange(resolvedResults.visualString);
-            resolvedLevels.AddRange(resolvedResults.resolvedLevels);
+        List<int> linesLengths = originalLinesLengths.ToList();
+
+        // TODO: I get an argument out of range exception on multi-line strings :(.
+        foreach (BidiPargraphData paragraphData in paragraphs) {
+            int lineStartOffset = 0;
+            for (; lineIndex < linesLengths.Count() && lineStartOffset < paragraphData.Length; lineIndex++) {
+                int lineLength = linesLengths[lineIndex];
+
+                // If the line is longer than the paragraph an explicit line break has been inserted.
+                // The dividing program is probably not aware of this, so the line break needs to be manually
+                // inserted and the line lengths need to change accordingly.
+                if (lineStartOffset + lineLength > paragraphData.Length) {
+                    int newLineLength = (int)(paragraphData.Length - lineStartOffset + 1);
+                    linesLengths[lineIndex] = newLineLength;
+                    linesLengths.Insert(lineIndex + 1, lineLength - newLineLength);
+                    lineLength = newLineLength;
+                }
+
+                Console.WriteLine("Hi 1");
+                Console.WriteLine($"{lineStartOffset} + {lineLength} ; {paragraphData.logicalString.Count()} {paragraphData.embeddingLevels.Count()}");
+                Console.WriteLine($"Line lengths: {string.Join(", ", linesLengths.Select(x => x.ToString()))}");
+
+                Console.WriteLine($"Hi 2");
+                uint[] logicalLine = paragraphData.logicalString.AsSpan().Slice(lineStartOffset, lineLength).ToArray();
+                Console.WriteLine($"Hi 3");
+                uint[] lineEmbeddingLevels = paragraphData.embeddingLevels.AsSpan().Slice(lineStartOffset, lineLength).ToArray();
+                lineStartOffset += lineLength;
+
+                Console.WriteLine($"Hi 4");
+
+                var resolvedResults = Bidi.ResolveLX(logicalLine, lineEmbeddingLevels, paragraphData.paragraphEmbeddingLevel, mirrorCharacters);
+                Console.WriteLine($"Hi 5");
+                orderedLines.AddRange(resolvedResults.visualString);
+                Console.WriteLine($"Hi 6");
+                resolvedLevels.AddRange(resolvedResults.resolvedLevels);
+                Console.WriteLine($"Hi 7");
+            }
         }
 
         return (orderedLines.ToArray(), resolvedLevels.ToArray());
@@ -175,7 +192,7 @@ public static class Bidi
     const uint RTL_DEFAULT_EMBEDDING_LEVEL = 1;
 
     static IEnumerable<ArraySegment<uint>> SplitParagraph(uint[] input) {
-        int spanStart = 0;
+    int spanStart = 0;
         for (int currentIndex = 0; currentIndex < input.Length; ++currentIndex) {
             if (BidiMap.GetBidiClass(input[currentIndex]) == BidiClass.B) {
                 yield return new ArraySegment<uint>(input, spanStart, currentIndex - spanStart + 1);
@@ -237,19 +254,19 @@ public static class Bidi
     }
 
     // The L rules implementation. TODO: This should be moved inside BidiParagraphData.
-    public static (uint[] visualString, uint[] resolvedLevels) ResolveLX(BidiPargraphData bidiData, bool mirrorCharacters = true) {
-        uint[] resolvedLevels = new uint[bidiData.embeddingLevels.Length];
-        Array.Copy(bidiData.embeddingLevels, resolvedLevels, bidiData.embeddingLevels.Length);
+    public static (uint[] visualString, uint[] resolvedLevels) ResolveLX(uint[] logicalLine, uint[] lineEmbeddingLevels, uint pargraphEmbeddingLevel, bool mirrorCharacters = true) {
+        uint[] resolvedLevels = new uint[lineEmbeddingLevels.Length];
+        Array.Copy(lineEmbeddingLevels, resolvedLevels, lineEmbeddingLevels.Length);
 
-        for (int absoluteCharIndex = 0; absoluteCharIndex < bidiData.logicalString.Length; ++absoluteCharIndex) {
-            BidiClass bidiClassValue = BidiMap.GetBidiClass(bidiData.logicalString[absoluteCharIndex]);
+        for (int absoluteCharIndex = 0; absoluteCharIndex < logicalLine.Length; ++absoluteCharIndex) {
+            BidiClass bidiClassValue = BidiMap.GetBidiClass(logicalLine[absoluteCharIndex]);
             if (bidiClassValue == BidiClass.S || bidiClassValue == BidiClass.B) {
-                resolvedLevels[absoluteCharIndex] = bidiData.paragraphEmbeddingLevel;
+                resolvedLevels[absoluteCharIndex] = pargraphEmbeddingLevel;
 
                 for (int iteratedCharIndex = absoluteCharIndex - 1; iteratedCharIndex >= 0; --iteratedCharIndex) {
-                    BidiClass iteratedBidiClassValue = BidiMap.GetBidiClass(bidiData.logicalString[iteratedCharIndex]);
+                    BidiClass iteratedBidiClassValue = BidiMap.GetBidiClass(logicalLine[iteratedCharIndex]);
                     if (iteratedBidiClassValue == BidiClass.WS || iteratedBidiClassValue.IsIsolateInitiator() || iteratedBidiClassValue == BidiClass.PDI) {
-                        resolvedLevels[iteratedCharIndex] = bidiData.paragraphEmbeddingLevel;
+                        resolvedLevels[iteratedCharIndex] = pargraphEmbeddingLevel;
                     } else {
                         break;
                     }
@@ -258,17 +275,17 @@ public static class Bidi
         }
 
         // L1 section 4.
-        for (int absoluteCharIndex = bidiData.logicalString.Length - 1; absoluteCharIndex >= 0; --absoluteCharIndex) {
-            BidiClass iteratedBidiClassValue = BidiMap.GetBidiClass(bidiData.logicalString[absoluteCharIndex]);
+        for (int absoluteCharIndex = logicalLine.Length - 1; absoluteCharIndex >= 0; --absoluteCharIndex) {
+            BidiClass iteratedBidiClassValue = BidiMap.GetBidiClass(logicalLine[absoluteCharIndex]);
             if (iteratedBidiClassValue == BidiClass.WS || iteratedBidiClassValue.IsIsolateInitiator() || iteratedBidiClassValue == BidiClass.PDI) {
-                resolvedLevels[absoluteCharIndex] = bidiData.paragraphEmbeddingLevel;
+                resolvedLevels[absoluteCharIndex] = pargraphEmbeddingLevel;
             } else {
                 break;
             }
         }
 
-        uint[] newString = new uint[bidiData.logicalString.Length];
-        Array.Copy(bidiData.logicalString, newString, newString.Length);
+        uint[] newString = new uint[logicalLine.Length];
+        Array.Copy(logicalLine, newString, newString.Length);
 
         uint highestEmbeddingLevel = resolvedLevels.Max();
         // uint lowestOddEmbeddingLevel = resolvedLevels.Where(level => level % 2 == 1).Min();
@@ -303,7 +320,7 @@ public static class Bidi
             }
         }
 
-        Debug.WriteLine($"Input: {string.Join(", ", bidiData.logicalString.Select(x => x.ToString("X4")))}");
+        Debug.WriteLine($"Input: {string.Join(", ", logicalLine.Select(x => x.ToString("X4")))}");
         Debug.WriteLine($"Output: {string.Join(", ", newString.Select(x => x.ToString("X4")))}");
         Debug.WriteLine($"Embedding Values: {string.Join(", ", resolvedLevels)}");
         return (newString, resolvedLevels);

@@ -39,7 +39,7 @@ public class BidiTests(ITestOutputHelper output)
 
         BidiString bidiString = Bidi.CreateBidiString(input, textDirection);
 
-        Assert.Equal(expectedEmbeddingLevels, bidiString.GetReolvedEmbeddingLevels());
+        Assert.Equal(expectedEmbeddingLevels, bidiString.GetResolvedEmbeddingLevels());
 
         // The unicode test don't support character mirroring.
         Assert.Equal(expectedOutput, bidiString.GetReorderedCodePoints(false));
